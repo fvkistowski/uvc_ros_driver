@@ -20,6 +20,7 @@
   <depend>ait_ros_messages</depend>
   <depend>roslib</depend>
   <depend>image_transport</depend>
+  <depend>dynamic_reconfigure</depend>
   <depend>yaml_cpp_catkin</depend>
   <depend>cuckoo_time_translator</depend>
 

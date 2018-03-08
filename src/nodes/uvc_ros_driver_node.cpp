@@ -40,6 +40,8 @@
 
 #include "uvc_ros_driver.h"
 
+#include <functional>
+
 // declare helper function
 CameraParameters loadCustomCameraCalibration(const std::string calib_path)
 {
@@ -66,6 +68,13 @@ CameraParameters loadCustomCameraCalibration(const std::string calib_path)
 	return cp;
 }
 
+//void dynamicReconfigureCallback(uvc_ros_driver::UvcDriverConfig& config, uint32_t level)
+//{
+  //ROS_INFO("Reconfigure Request: %s %f",
+            //config.CAMERA_AUTOEXP? "True" : "False",
+            //config.CAMERA_EXP);
+//}
+
 int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "uvc_camera");
@@ -74,8 +83,8 @@ int main(int argc, char **argv)
 	uvc::uvcROSDriver uvc_ros_driver(nh);
 
 	// get params from launch file
-	bool flip, set_calibration, depth_map, calibration_mode, ait_msgs;
-	int camera_config, number_of_cameras;
+	bool flip, set_calibration, depth_map, calibration_mode, ait_msgs, primary_camera_mode;
+	int number_of_cameras;
 	std::string calibration_file_path;
 	// TODO: check if parameter exist
 	nh.getParam("flip", flip);
@@ -85,11 +94,13 @@ int main(int argc, char **argv)
 	nh.getParam("depthMap", depth_map);
 	nh.getParam("cameraConfigFile", calibration_file_path);
 	nh.getParam("calibrationMode", calibration_mode);
+	nh.getParam("primaryCamMode", primary_camera_mode);
 
 	// set parameters
 	uvc_ros_driver.setNumberOfCameras(number_of_cameras);
 	uvc_ros_driver.setUseOFAITMsgs(ait_msgs);
 	uvc_ros_driver.setFlip(flip);
+	uvc_ros_driver.setPrimaryCamMode(primary_camera_mode);
 
 	// initialize device
 	uvc_ros_driver.initDevice();

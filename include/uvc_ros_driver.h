@@ -53,11 +53,13 @@
 #include "stereo_homography.h"
 
 #include "libuvc/libuvc.h"
+#include "uvc_ros_driver/UvcDriverConfig.h"
 
 #include <ait_ros_messages/VioSensorMsg.h>
 
 #include <cuckoo_time_translator/DeviceTimeTranslator.h>
 
+#include <dynamic_reconfigure/server.h>
 #include <ros/package.h>
 #include <ros/ros.h>
 #include <sensor_msgs/CameraInfo.h>
@@ -88,6 +90,7 @@ class uvcROSDriver {
   bool device_initialized_ = false;
   bool enable_ait_vio_msg_ = false;
   bool flip_ = false;
+  bool primary_camera_mode_ = false;
   bool depth_map_ = false;
   bool set_calibration_ = false;
   bool uvc_cb_flag_ = false;
@@ -103,12 +106,17 @@ class uvcROSDriver {
   int frameCounter_ = 0;
   int modulo_ = 1;
   int calibration_mode_ = 0;
+  bool shutdown_ = 0;
 
   // homography variables
   std::vector<std::pair<int, int>> homography_mapping_;
   std::vector<double> f_;
   std::vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d>> p_;
   std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> H_;
+
+  // Dynamic reconfigure.
+  dynamic_reconfigure::Server<uvc_ros_driver::UvcDriverConfig>
+      dynamic_reconfigure_;
 
   CameraParameters camera_params_;
   // serial port
@@ -153,8 +161,7 @@ class uvcROSDriver {
   static CamID extractCamId(uvc_frame_t *frame);
   static uint8_t extractImuId(uvc_frame_t *frame);
   static uint8_t extractImuCount(size_t line, uvc_frame_t *frame);
-  bool extractImuData(size_t line, uvc_frame_t *frame,
-                             sensor_msgs::Imu *msg);
+  bool extractImuData(size_t line, uvc_frame_t *frame, sensor_msgs::Imu *msg);
   static double extractImuElementData(size_t imu_idx, ImuElement element,
                                       uvc_frame_t *frame);
   static void extractImages(uvc_frame_t *frame,
@@ -162,11 +169,16 @@ class uvcROSDriver {
 
   uvc_error_t initAndOpenUvc();
   int setParam(const std::string &name, float val);
-  void sendCameraParam(const int camera_number, const double fx,
-                       const double fy, const Eigen::Vector2d &p0,
-                       const float k1, const float k2, const float r1,
-                       const float r2, const Eigen::Matrix3d &H);
+  void sendCameraParam(const int camera_number,
+                       const uvc_ros_driver::DistortionModelTypes dtype,
+                       const double fx, const double fy,
+                       const Eigen::Vector2d &p0, const float k1,
+                       const float k2, const float r1, const float r2,
+                       const Eigen::Matrix3d &H);
   void setCalibration(CameraParameters camParams);
+
+  void dynamicReconfigureCallback(uvc_ros_driver::UvcDriverConfig &config,
+                                  uint32_t level);
 
   inline void selectCameraInfo(int camera, sensor_msgs::CameraInfo **ci);
 
@@ -189,6 +201,10 @@ class uvcROSDriver {
   void setUseOFAITMsgs(bool enable) { enable_ait_vio_msg_ = enable; };
   bool getFlip() { return flip_; };
   void setFlip(bool flip) { flip_ = flip; };
+  bool getPrimaryCamMode() { return primary_camera_mode_; };
+  void setPrimaryCamMode(bool primary_camera_mode) {
+    primary_camera_mode_ = primary_camera_mode;
+  };
   bool getUseOfDepthMap() { return depth_map_; };
   void setUseOfDepthMap(bool depth_map) { depth_map_ = depth_map; };
   bool getCalibrationParam() { return set_calibration_; };
@@ -204,7 +220,7 @@ class uvcROSDriver {
         camera_config_ = 0x3FF;
         break;
       case 8:
-        camera_config_ = 0x1EF;
+        camera_config_ = 0x00F;
         break;
 
       case 6:
@@ -242,7 +258,7 @@ class uvcROSDriver {
 
     // update modulo_ variable also
     if (calibration_mode != 0) {
-      modulo_ = 12;
+      modulo_ = 4;
     }
   };
 };
