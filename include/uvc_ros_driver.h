@@ -104,17 +104,6 @@ class uvcROSDriver {
   int modulo_ = 1;
   int calibration_mode_ = 0;
 
-  ros::Duration imu_dt_ = ros::Duration(0.0);
-  ros::Time timestamp_prev_imu_msg_;
-
-  // TODO: add other camera parameters
-  // float ....
-
-  const double acc_scale_factor = 16384.0;
-  const double gyr_scale_factor = 131.0;
-  const double deg2rad = 2 * M_PI / 360.0;
-  const double k_ms_to_sec = 1000000.0;
-
   // homography variables
   std::vector<std::pair<int, int>> homography_mapping_;
   std::vector<double> f_;
@@ -134,15 +123,6 @@ class uvcROSDriver {
   ros::NodeHandle nh_;
   image_transport::ImageTransport it_;
 
-  // node name
-  std::string node_name_;
-  // time
-  ros::Time past_;
-  ros::Time frame_time_;
-
-  uint32_t time_wrapper_check_frame_ = 0;
-  uint32_t time_wrapper_check_line_ = 0;
-
   // image publishers
   std::vector<image_transport::Publisher> cam_raw_pubs_;
   std::vector<image_transport::Publisher> cam_rect_pubs_;
@@ -157,16 +137,28 @@ class uvcROSDriver {
   std::unique_ptr<cuckoo_time_translator::UnwrappedDeviceTimeTranslator>
       device_time_translator_;
 
-  bool extractAndTranslateTimestamp(size_t offset, bool update_translator,
+  // low level byte helper functions
+  static uint8_t *rawDataPtr(const uvc_frame_t *frame, const size_t line,
+                             const size_t offset);
+  static uint8_t readUInt8(const uvc_frame_t *frame, const size_t line,
+                           const size_t offset);
+  static int16_t readInt16(const uvc_frame_t *frame, const size_t line,
+                           const size_t offset);
+  static uint32_t readUInt32(const uvc_frame_t *frame, const size_t line,
+                             const size_t offset);
+
+  // extract data from frames
+  bool extractAndTranslateTimestamp(size_t line, bool update_translator,
                                     uvc_frame_t *frame, ros::Time *stamp);
-  CamID extractCamId(uvc_frame_t *frame);
-  uint8_t extractImuId(uvc_frame_t *frame);
-  uint8_t extractImuCount(size_t offset, uvc_frame_t *frame);
-  bool extractImuData(size_t offset, uvc_frame_t *frame, sensor_msgs::Imu *msg);
-  double extractImuElementData(size_t imu_idx, ImuElement element,
-                               uvc_frame_t *frame);
-  void extractImages(uvc_frame_t *frame,
-                     ait_ros_messages::VioSensorMsg *msg_vio);
+  static CamID extractCamId(uvc_frame_t *frame);
+  static uint8_t extractImuId(uvc_frame_t *frame);
+  static uint8_t extractImuCount(size_t line, uvc_frame_t *frame);
+  bool extractImuData(size_t line, uvc_frame_t *frame,
+                             sensor_msgs::Imu *msg);
+  static double extractImuElementData(size_t imu_idx, ImuElement element,
+                                      uvc_frame_t *frame);
+  static void extractImages(uvc_frame_t *frame,
+                            ait_ros_messages::VioSensorMsg *msg_vio);
 
   uvc_error_t initAndOpenUvc();
   int setParam(const std::string &name, float val);
@@ -179,8 +171,7 @@ class uvcROSDriver {
   inline void selectCameraInfo(int camera, sensor_msgs::CameraInfo **ci);
 
  public:
-  uvcROSDriver(ros::NodeHandle nh)
-      : nh_(nh), it_(nh_), node_name_(ros::this_node::getName()){};
+  uvcROSDriver(ros::NodeHandle nh) : nh_(nh), it_(nh_){};
   ~uvcROSDriver();
   void uvc_cb(uvc_frame_t *frame);
   /**
@@ -210,34 +201,29 @@ class uvcROSDriver {
 
     switch (n_cameras) {
       case 10:
-        // camera_config_ = 0x01F;
         camera_config_ = 0x3FF;
         break;
       case 8:
-        // camera_config_ = 0x00F;
         camera_config_ = 0x1EF;
         break;
 
       case 6:
-        camera_config_ = 0xE7;
+        camera_config_ = 0x0E7;
         break;
 
       case 4:
 
-        camera_config_ = 0x63;
+        camera_config_ = 0x063;
         break;
 
       case 2:
       default:
-        camera_config_ = 0x21;
+        camera_config_ = 0x021;
         break;
     }
   };
   int getCameraConfig() { return camera_config_; };
-  //	void setCameraConfig(int camera_config)
-  //	{
-  //		camera_config_ = camera_config;
-  //	};
+
   CameraParameters getCameraParams() { return camera_params_; };
   void setCameraParams(const CameraParameters &camera_params) {
     camera_params_ = camera_params;
