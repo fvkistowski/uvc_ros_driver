@@ -91,6 +91,7 @@ class uvcROSDriver {
   bool enable_ait_vio_msg_ = false;
   bool flip_ = false;
   bool primary_camera_mode_ = false;
+  bool raw_enabled_ = false;
   bool depth_map_ = false;
   bool set_calibration_ = false;
   bool uvc_cb_flag_ = false;
@@ -98,7 +99,6 @@ class uvcROSDriver {
   bool serial_port_open_ = false;
 
   int n_cameras_ = 2;
-  int camera_config_ = 1;
   int raw_width_ = 752 + 16;  // 376+16;//
   int raw_height_ = 480;      // 240;//
   int width_ = raw_width_ - 16;
@@ -197,48 +197,51 @@ class uvcROSDriver {
    */
   void startDevice();
   // getter and setter for different internal variables
-  bool getUseOfAITMsgs() { return enable_ait_vio_msg_; };
-  void setUseOFAITMsgs(bool enable) { enable_ait_vio_msg_ = enable; };
-  bool getFlip() { return flip_; };
-  void setFlip(bool flip) { flip_ = flip; };
-  bool getPrimaryCamMode() { return primary_camera_mode_; };
+  bool getUseOfAITMsgs() { return enable_ait_vio_msg_; }
+  void setUseOFAITMsgs(bool enable) { enable_ait_vio_msg_ = enable; }
+  bool getFlip() { return flip_; }
+  void setFlip(bool flip) { flip_ = flip; }
+  bool getPrimaryCamMode() { return primary_camera_mode_; }
   void setPrimaryCamMode(bool primary_camera_mode) {
     primary_camera_mode_ = primary_camera_mode;
   };
-  bool getUseOfDepthMap() { return depth_map_; };
-  void setUseOfDepthMap(bool depth_map) { depth_map_ = depth_map; };
-  bool getCalibrationParam() { return set_calibration_; };
+  bool getRawEnabledMode() { return raw_enabled_; }
+  void setRawEnabledMode(bool raw_enabled) { raw_enabled_ = raw_enabled; }
+  bool getUseOfDepthMap() { return depth_map_; }
+  void setUseOfDepthMap(bool depth_map) { depth_map_ = depth_map; }
+  bool getCalibrationParam() { return set_calibration_; }
   void setCalibrationParam(bool calibration) {
     set_calibration_ = calibration;
   };
-  int getNumberOfCameras() { return n_cameras_; };
-  void setNumberOfCameras(int n_cameras) {
-    n_cameras_ = n_cameras;
-
-    switch (n_cameras) {
+  int getNumberOfCameras() { return n_cameras_; }
+  void setNumberOfCameras(int n_cameras) { n_cameras_ = n_cameras; }
+  int buildCameraConfig() {
+    int camera_config;
+    switch (n_cameras_) {
       case 10:
-        camera_config_ = 0x3FF;
+        camera_config = 0x3FE;
         break;
       case 8:
-        camera_config_ = 0x00F;
+        camera_config = 0x00E;
         break;
-
       case 6:
-        camera_config_ = 0x0E7;
+        camera_config = 0x0E6;
         break;
-
       case 4:
-
-        camera_config_ = 0x063;
+        camera_config = 0x062;
         break;
-
       case 2:
       default:
-        camera_config_ = 0x021;
+        camera_config = 0x020;
         break;
     }
-  };
-  int getCameraConfig() { return camera_config_; };
+
+    if (raw_enabled_) {
+      ++camera_config;
+    }
+
+    return camera_config;
+  }
 
   CameraParameters getCameraParams() { return camera_params_; };
   void setCameraParams(const CameraParameters &camera_params) {

@@ -96,6 +96,11 @@ int main(int argc, char **argv)
 	nh.getParam("calibrationMode", calibration_mode);
 	nh.getParam("primaryCamMode", primary_camera_mode);
 
+	//force cam number to be even
+	if (number_of_cameras % 2 != 0){
+      ++number_of_cameras;
+    }
+
 	// set parameters
 	uvc_ros_driver.setNumberOfCameras(number_of_cameras);
 	uvc_ros_driver.setUseOFAITMsgs(ait_msgs);

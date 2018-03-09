@@ -222,7 +222,7 @@ void uvcROSDriver::startDevice() {
     // start stream
     res = uvc_start_streaming(devh_, &ctrl_, &callback, this, 0);
 
-    setParam("CAMERA_ENABLE", float(camera_config_));
+    setParam("CAMERA_ENABLE", static_cast<float>(buildCameraConfig()));
     setCalibration(camera_params_);
 
     printf("Waiting on stream");
@@ -230,7 +230,7 @@ void uvcROSDriver::startDevice() {
       printf(".");
       fflush(stdout);
 
-      if (setParam("CAMERA_ENABLE", float(camera_config_)) == -1) {
+      if (setParam("CAMERA_ENABLE", static_cast<float>(buildCameraConfig())) == -1) {
         ROS_ERROR("Device not initialized!");
         return;
       }
@@ -551,14 +551,8 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
 
   setParam("SETCALIB", float(set_calibration_));
 
-  // std::cout << "Configuring cameras..." << std::endl;
   setParam("RESETMT9V034", 1.0f);
   setParam("RESETICM20608", 1.0f);
-  // sleep(5);  // needed, fpga reconfigure cameras and restart time
-  // std::cout << "Configuration completed." << std::endl;
-  // last 4 bits activate the 4 camera pairs 0x01 = pair 1 only, 0x0F all 4
-  // pairs
-  // setParam("CAMERA_ENABLE", float(camera_config_));
 }
 
 void uvcROSDriver::dynamicReconfigureCallback(
@@ -579,7 +573,8 @@ void uvcROSDriver::dynamicReconfigureCallback(
     // update camera parameters in FPGA
     setParam("UPDATEMT9V034", 1.0f);
 
-    // setParam("CAMERA_ENABLE",float(camera_config_));
+    raw_enabled_ = config.RAW_ENABLED;
+    setParam("CAMERA_ENABLE",static_cast<float>(buildCameraConfig()));
 
     setParam("STEREO_RE_CAM1", static_cast<float>(config.STEREO_RE_CAM1));
     setParam("STEREO_CE_CAM1", static_cast<float>(config.STEREO_CE_CAM1));
@@ -893,12 +888,11 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     return;
   }
 
-  const bool raw_enabled = (camera_config_ & 0x001) != 0;
   const uint16_t frame_counter_cam = n_cameras_ < 9 ? 0 : 8;
 
   static ros::Time frame_time;
   if ((cam_id.left_cam_num == frame_counter_cam) &&
-      (cam_id.is_raw_images == raw_enabled)) {
+      (cam_id.is_raw_images == raw_enabled_)) {
     if (!extractAndTranslateTimestamp(0, false, frame, &frame_time)) {
       ROS_ERROR("Invalid timestamp, dropping frame");
     }
