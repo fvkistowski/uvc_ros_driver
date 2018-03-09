@@ -43,6 +43,9 @@
 #include <functional>
 #include <iostream>
 
+#include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/image_encodings.h>
+
 #include "uvc_ros_driver.h"
 
 namespace uvc {
@@ -788,30 +791,23 @@ double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
 
 void uvcROSDriver::extractImages(uvc_frame_t *frame,
                                  ait_ros_messages::VioSensorMsg *msg_vio) {
+  
   // read the image data and separate the 2 images
-  const size_t mixed_size = 2 * (frame->height * frame->width);
-  const std::valarray<uint8_t> data(static_cast<uint8_t *>(frame->data),
-                                    mixed_size);
-  const std::valarray<uint8_t> left_val =
-      data[std::slice(0, mixed_size / 2, 2)];
-  const std::valarray<uint8_t> right_val =
-      data[std::slice(1, mixed_size / 2, 2)];
-  std::vector<uint8_t> left(std::begin(left_val), std::end(left_val));
-  std::vector<uint8_t> right(std::begin(right_val), std::end(right_val));
+  const cv::Mat input_image(frame->height, frame->width, CV_8UC2, frame->data);
+  
+  cv::Mat split_images[2];
+  cv::split(input_image(cv::Rect(0,0,frame->width-16,frame->height)),split_images);  
 
-  sensor_msgs::fillImage(msg_vio->left_image,
-                         sensor_msgs::image_encodings::MONO8,  //
-                         frame->height,                        // height
-                         frame->width - 16,                    // width
-                         frame->width,                         // stepSize
-                         left.data());
+  cv_bridge::CvImage left;
+  left.encoding = sensor_msgs::image_encodings::MONO8; 
+  left.image    = split_images[0];
+  msg_vio->left_image = *left.toImageMsg();
 
-  sensor_msgs::fillImage(msg_vio->right_image,
-                         sensor_msgs::image_encodings::MONO8,  // BAYER_RGGB8,//
-                         frame->height,                        // height
-                         frame->width - 16,                    // width
-                         frame->width,                         // stepSize
-                         right.data());
+  cv_bridge::CvImage right;
+  right.encoding = sensor_msgs::image_encodings::MONO8; 
+  right.image    = split_images[1];
+  msg_vio->right_image = *right.toImageMsg();
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
