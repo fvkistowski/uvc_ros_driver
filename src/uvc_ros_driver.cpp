@@ -159,13 +159,13 @@ void uvcROSDriver::initDevice() {
   info_cams_.resize(n_cameras_);
 
   // time translator
-  constexpr int kSecondsToNanoSeconds = 1e9;
+  constexpr int kSecondsToMicroSeconds = 1e6;
+  constexpr int kTimerBits = 32;
   device_time_translator_.reset(
       new cuckoo_time_translator::UnwrappedDeviceTimeTranslator(
-          cuckoo_time_translator::ClockParameters(kSecondsToNanoSeconds),
-          nh_.getNamespace(),
-          cuckoo_time_translator::Defaults().setFilterAlgorithm(
-              cuckoo_time_translator::FilterAlgorithm::ConvexHull)));
+          cuckoo_time_translator::WrappingClockParameters(
+              1L << kTimerBits, kSecondsToMicroSeconds),
+          nh_.getNamespace()));
 
   // wait on heartbeat
   std::cout << "Waiting on device.";
@@ -233,7 +233,8 @@ void uvcROSDriver::startDevice() {
       printf(".");
       fflush(stdout);
 
-      if (setParam("CAMERA_ENABLE", static_cast<float>(buildCameraConfig())) == -1) {
+      if (setParam("CAMERA_ENABLE", static_cast<float>(buildCameraConfig())) ==
+          -1) {
         ROS_ERROR("Device not initialized!");
         return;
       }
@@ -504,52 +505,28 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
 
     setParam("CALIB_GAIN", 4300.0f);
 
-    setParam("CAMERA_H_FLIP", static_cast<float>(flip_));
     setParam("P_MODE", static_cast<float>(primary_camera_mode_));
 
-    if (flip_) {
-      setParam("IM_H_FLIP_CAM0", 0.0f);
-      setParam("IM_V_FLIP_CAM0", 0.0f);
-      setParam("IM_H_FLIP_CAM2", 0.0f);
-      setParam("IM_V_FLIP_CAM2", 0.0f);
-      setParam("IM_H_FLIP_CAM4", 0.0f);
-      setParam("IM_V_FLIP_CAM4", 0.0f);
-      setParam("IM_H_FLIP_CAM6", 0.0f);
-      setParam("IM_V_FLIP_CAM6", 0.0f);
-      setParam("IM_H_FLIP_CAM8", 0.0f);
-      setParam("IM_V_FLIP_CAM8", 0.0f);
-      setParam("IM_H_FLIP_CAM1", 1.0f);
-      setParam("IM_V_FLIP_CAM1", 1.0f);
-      setParam("IM_H_FLIP_CAM3", 1.0f);
-      setParam("IM_V_FLIP_CAM3", 1.0f);
-      setParam("IM_H_FLIP_CAM5", 1.0f);
-      setParam("IM_V_FLIP_CAM5", 1.0f);
-      setParam("IM_H_FLIP_CAM7", 1.0f);
-      setParam("IM_V_FLIP_CAM7", 1.0f);
-      setParam("IM_H_FLIP_CAM9", 1.0f);
-      setParam("IM_V_FLIP_CAM9", 1.0f);
-    } else {
-      setParam("IM_H_FLIP_CAM0", 1.0f);
-      setParam("IM_V_FLIP_CAM0", 1.0f);
-      setParam("IM_H_FLIP_CAM2", 1.0f);
-      setParam("IM_V_FLIP_CAM2", 1.0f);
-      setParam("IM_H_FLIP_CAM4", 1.0f);
-      setParam("IM_V_FLIP_CAM4", 1.0f);
-      setParam("IM_H_FLIP_CAM6", 1.0f);
-      setParam("IM_V_FLIP_CAM6", 1.0f);
-      setParam("IM_H_FLIP_CAM8", 1.0f);
-      setParam("IM_V_FLIP_CAM8", 1.0f);
-      setParam("IM_H_FLIP_CAM1", 0.0f);
-      setParam("IM_V_FLIP_CAM1", 0.0f);
-      setParam("IM_H_FLIP_CAM3", 0.0f);
-      setParam("IM_V_FLIP_CAM3", 0.0f);
-      setParam("IM_H_FLIP_CAM5", 0.0f);
-      setParam("IM_V_FLIP_CAM5", 0.0f);
-      setParam("IM_H_FLIP_CAM7", 0.0f);
-      setParam("IM_V_FLIP_CAM7", 0.0f);
-      setParam("IM_H_FLIP_CAM9", 0.0f);
-      setParam("IM_V_FLIP_CAM9", 0.0f);
-    }
+    setParam("IM_H_FLIP_CAM0", 1.0f);
+    setParam("IM_V_FLIP_CAM0", 1.0f);
+    setParam("IM_H_FLIP_CAM2", 1.0f);
+    setParam("IM_V_FLIP_CAM2", 1.0f);
+    setParam("IM_H_FLIP_CAM4", 1.0f);
+    setParam("IM_V_FLIP_CAM4", 1.0f);
+    setParam("IM_H_FLIP_CAM6", 1.0f);
+    setParam("IM_V_FLIP_CAM6", 1.0f);
+    setParam("IM_H_FLIP_CAM8", 0.0f);
+    setParam("IM_V_FLIP_CAM8", 0.0f);
+    setParam("IM_H_FLIP_CAM1", 0.0f);
+    setParam("IM_V_FLIP_CAM1", 0.0f);
+    setParam("IM_H_FLIP_CAM3", 0.0f);
+    setParam("IM_V_FLIP_CAM3", 0.0f);
+    setParam("IM_H_FLIP_CAM5", 0.0f);
+    setParam("IM_V_FLIP_CAM5", 0.0f);
+    setParam("IM_H_FLIP_CAM7", 0.0f);
+    setParam("IM_V_FLIP_CAM7", 0.0f);
+    setParam("IM_H_FLIP_CAM9", 1.0f);
+    setParam("IM_V_FLIP_CAM9", 1.0f);
   }
 
   setParam("SETCALIB", float(set_calibration_));
@@ -569,15 +546,12 @@ void uvcROSDriver::dynamicReconfigureCallback(
     setParam("CAMERA_GAIN", static_cast<float>(config.CAMERA_GAIN));
     setParam("P_MODE", static_cast<float>(config.PRIMARY_CAM_MODE));
 
-    setParam("IM_H_FLIP_CAM0", static_cast<float>(config.CAMERA_0_HFLIP));
-    setParam("IM_V_FLIP_CAM0", static_cast<float>(config.CAMERA_0_VFLIP));
-
     setParam("ADIS_IMU", static_cast<float>(config.ADIS_IMU));
     // update camera parameters in FPGA
     setParam("UPDATEMT9V034", 1.0f);
 
     raw_enabled_ = config.RAW_ENABLED;
-    setParam("CAMERA_ENABLE",static_cast<float>(buildCameraConfig()));
+    setParam("CAMERA_ENABLE", static_cast<float>(buildCameraConfig()));
 
     setParam("STEREO_RE_CAM1", static_cast<float>(config.STEREO_RE_CAM1));
     setParam("STEREO_CE_CAM1", static_cast<float>(config.STEREO_CE_CAM1));
@@ -684,9 +658,7 @@ bool uvcROSDriver::extractAndTranslateTimestamp(size_t line,
     return false;
   }
 
-  constexpr uint64_t kMicroSecondsToNanoSeconds = 1e3;
-  const uint64_t fpga_timestamp_64 =
-      static_cast<uint64_t>(fpga_timestamp) * kMicroSecondsToNanoSeconds;
+  const uint64_t fpga_timestamp_64 = static_cast<uint64_t>(fpga_timestamp);
 
   // only update on image timestamps
   if (update_translator) {
@@ -762,14 +734,13 @@ bool uvcROSDriver::extractImuData(size_t line, uvc_frame_t *frame,
 
 double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
                                            uvc_frame_t *frame) {
-
   constexpr double kDeg2Rad = 2 * M_PI / 360.0;
   constexpr double kGravity = 9.807;
-  
+
   // Standard IMU
-  //constexpr double kAccScaleFactor = kGravity / 16384.0;
-  //constexpr double kGyrScaleFactor = kDeg2Rad / 131.0;
-  
+  // constexpr double kAccScaleFactor = kGravity / 16384.0;
+  // constexpr double kGyrScaleFactor = kDeg2Rad / 131.0;
+
   // Scaling factors for ADIS.
   constexpr double kAccScaleFactor = kGravity / 4000.0;
   constexpr double kGyrScaleFactor = kDeg2Rad / 100.0;
@@ -791,23 +762,22 @@ double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
 
 void uvcROSDriver::extractImages(uvc_frame_t *frame,
                                  ait_ros_messages::VioSensorMsg *msg_vio) {
-  
   // read the image data and separate the 2 images
   const cv::Mat input_image(frame->height, frame->width, CV_8UC2, frame->data);
-  
+
   cv::Mat split_images[2];
-  cv::split(input_image(cv::Rect(0,0,frame->width-16,frame->height)),split_images);  
+  cv::split(input_image(cv::Rect(0, 0, frame->width - 16, frame->height)),
+            split_images);
 
   cv_bridge::CvImage left;
-  left.encoding = sensor_msgs::image_encodings::MONO8; 
-  left.image    = split_images[0];
+  left.encoding = sensor_msgs::image_encodings::MONO8;
+  left.image = split_images[0];
   msg_vio->left_image = *left.toImageMsg();
 
   cv_bridge::CvImage right;
-  right.encoding = sensor_msgs::image_encodings::MONO8; 
-  right.image    = split_images[1];
+  right.encoding = sensor_msgs::image_encodings::MONO8;
+  right.image = split_images[1];
   msg_vio->right_image = *right.toImageMsg();
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -816,6 +786,7 @@ void uvcROSDriver::extractImages(uvc_frame_t *frame,
   quick processing you need, or have it put the frame into your application's
   input queue.If this function takes too long, you'll start losing frames. */
 void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
+
   // check if evrytstartedhing ok
   if (!ros::ok()) {
     return;
@@ -830,19 +801,26 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
 
   ait_ros_messages::VioSensorMsg msg_vio;
 
-  unsigned frame_size = frame->height * frame->width * 2;
-
   const uint8_t imu_id = extractImuId(frame);
+  const CamID cam_id = extractCamId(frame);
+
+  const uint16_t frame_counter_cam = n_cameras_ < 9 ? 0 : 8;
+
+  static ros::Time frame_time;
+  if ((cam_id.left_cam_num == frame_counter_cam) &&
+      (cam_id.is_raw_images == raw_enabled_)) {
+    if (!extractAndTranslateTimestamp(0, true, frame, &frame_time)) {
+      ROS_ERROR("Invalid timestamp, dropping frame");
+    }
+    frameCounter_++;
+  }
+
 
   static uint8_t prev_count = 0;
 
-  // update timesync
-  ros::Time dummy_time;
-  extractAndTranslateTimestamp(0, true, frame, &dummy_time);
-
   // process the IMU data
   bool is_first_imu_msg = true;
-  
+
   static int imu_msg_skip = 0;
   constexpr int kNumImuToSkip = 36;
 
@@ -860,7 +838,7 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
         continue;
       }
 
-      if(kNumImuToSkip < imu_msg_skip){
+      if (kNumImuToSkip < imu_msg_skip) {
         msg_vio.imu.push_back(msg_imu);
         imu_pubs_[imu_id].publish(msg_imu);
         imu_msg_skip = 0;
@@ -877,22 +855,9 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
 
   extractImages(frame, &msg_vio);
 
-  const CamID cam_id = extractCamId(frame);
-
   if (cam_id.right_cam_num >= n_cameras_) {
     ROS_ERROR_STREAM("Tried to publish to camera " << cam_id.right_cam_num);
     return;
-  }
-
-  const uint16_t frame_counter_cam = n_cameras_ < 9 ? 0 : 8;
-
-  static ros::Time frame_time;
-  if ((cam_id.left_cam_num == frame_counter_cam) &&
-      (cam_id.is_raw_images == raw_enabled_)) {
-    if (!extractAndTranslateTimestamp(0, false, frame, &frame_time)) {
-      ROS_ERROR("Invalid timestamp, dropping frame");
-    }
-    frameCounter_++;
   }
 
   msg_vio.header.stamp = frame_time;

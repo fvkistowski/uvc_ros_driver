@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(uvc_ros_driver)
 
-add_definitions(-std=c++11 -g)
+add_definitions(-std=c++11)
 
 find_package(catkin_simple REQUIRED)
 catkin_simple(ALL_DEPS_REQUIRED)
@@ -17,7 +17,6 @@ find_package(libuvc REQUIRED)
 
 include_directories(
   include
-  ${YamlCpp_INCLUDE_DIRS}
   ${libuvc_INCLUDE_DIRS}
   /usr/include/libusb-1.0
   src/nodes/c_library
@@ -36,7 +35,6 @@ cs_add_executable(uvc_ros_driver_node
 )
 
 target_link_libraries(uvc_ros_driver
-  ${YamlCpp_LIBRARIES}
   ${libuvc_LIBRARIES}
 )
 

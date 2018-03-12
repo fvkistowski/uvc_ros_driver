@@ -1,6 +1,4 @@
 <launch>
-
-  <arg name="flip" default="false" />     <!-- Horizontal + Vertical flip -->
   <arg name="numberOfCameras" default="2" />
   <arg name="primaryCamMode" default="false"/>
   <!-- upload calibration to fpga -->
@@ -18,8 +16,7 @@
   <arg name="cameraConfigFile" default="/media/camera/calibration.yaml" />
 
   <!-- camera node -->
-  <node pkg="uvc_ros_driver" name="uvc_camera" type="uvc_ros_driver_node" output="screen">
-    <param name="flip" type="bool"  value="$(arg flip)" />
+  <node pkg="uvc_ros_driver" name="uvc_camera" type="uvc_ros_driver_node" output="screen" launch-prefix="gdb -ex run --args">
     <param name="numberOfCameras" type="int"  value="$(arg numberOfCameras)" />
     <param name="primaryCamMode" type="bool" value="$(arg primaryCamMode)"/>
     <param name="AITMsgs" type="bool"  value="$(arg AITMsgs)" />

@@ -89,7 +89,6 @@ class uvcROSDriver {
 
   bool device_initialized_ = false;
   bool enable_ait_vio_msg_ = false;
-  bool flip_ = false;
   bool primary_camera_mode_ = false;
   bool raw_enabled_ = false;
   bool depth_map_ = false;
@@ -199,8 +198,6 @@ class uvcROSDriver {
   // getter and setter for different internal variables
   bool getUseOfAITMsgs() { return enable_ait_vio_msg_; }
   void setUseOFAITMsgs(bool enable) { enable_ait_vio_msg_ = enable; }
-  bool getFlip() { return flip_; }
-  void setFlip(bool flip) { flip_ = flip; }
   bool getPrimaryCamMode() { return primary_camera_mode_; }
   void setPrimaryCamMode(bool primary_camera_mode) {
     primary_camera_mode_ = primary_camera_mode;

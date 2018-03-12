@@ -83,11 +83,10 @@ int main(int argc, char **argv)
 	uvc::uvcROSDriver uvc_ros_driver(nh);
 
 	// get params from launch file
-	bool flip, set_calibration, depth_map, calibration_mode, ait_msgs, primary_camera_mode;
+	bool set_calibration, depth_map, calibration_mode, ait_msgs, primary_camera_mode;
 	int number_of_cameras;
 	std::string calibration_file_path;
 	// TODO: check if parameter exist
-	nh.getParam("flip", flip);
 	nh.getParam("numberOfCameras", number_of_cameras);
 	nh.getParam("AITMsgs", ait_msgs);
 	nh.getParam("setCalibration", set_calibration);
@@ -104,7 +103,6 @@ int main(int argc, char **argv)
 	// set parameters
 	uvc_ros_driver.setNumberOfCameras(number_of_cameras);
 	uvc_ros_driver.setUseOFAITMsgs(ait_msgs);
-	uvc_ros_driver.setFlip(flip);
 	uvc_ros_driver.setPrimaryCamMode(primary_camera_mode);
 
 	// initialize device
