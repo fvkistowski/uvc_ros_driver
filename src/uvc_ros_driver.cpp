@@ -165,7 +165,9 @@ void uvcROSDriver::initDevice() {
       new cuckoo_time_translator::UnwrappedDeviceTimeTranslator(
           cuckoo_time_translator::WrappingClockParameters(
               1L << kTimerBits, kSecondsToMicroSeconds),
-          nh_.getNamespace()));
+          nh_.getNamespace(),
+          cuckoo_time_translator::Defaults().setFilterAlgorithm(
+              cuckoo_time_translator::FilterAlgorithm::ConvexHull)));
 
   // wait on heartbeat
   std::cout << "Waiting on device.";
@@ -734,7 +736,7 @@ bool uvcROSDriver::extractImuData(size_t line, uvc_frame_t *frame,
 
 double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
                                            uvc_frame_t *frame) {
-  constexpr double kDeg2Rad = 2 * M_PI / 360.0;
+  constexpr double kDeg2Rad = M_PI / 180.0;
   constexpr double kGravity = 9.807;
 
   // Standard IMU
@@ -786,7 +788,6 @@ void uvcROSDriver::extractImages(uvc_frame_t *frame,
   quick processing you need, or have it put the frame into your application's
   input queue.If this function takes too long, you'll start losing frames. */
 void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
-
   // check if evrytstartedhing ok
   if (!ros::ok()) {
     return;
@@ -804,7 +805,7 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
   const uint8_t imu_id = extractImuId(frame);
   const CamID cam_id = extractCamId(frame);
 
-  const uint16_t frame_counter_cam = n_cameras_ < 9 ? 0 : 8;
+  const uint16_t frame_counter_cam = ((n_cameras_ < 9) || primary_camera_mode_) ? 0 : 8;
 
   static ros::Time frame_time;
   if ((cam_id.left_cam_num == frame_counter_cam) &&
@@ -815,14 +816,13 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     frameCounter_++;
   }
 
-
   static uint8_t prev_count = 0;
 
   // process the IMU data
   bool is_first_imu_msg = true;
 
   static int imu_msg_skip = 0;
-  constexpr int kNumImuToSkip = 36;
+  constexpr int kNumImuToSkip = 18;
 
   for (size_t i = 0; i < frame->height; ++i) {
     sensor_msgs::Imu msg_imu;
