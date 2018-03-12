@@ -96,6 +96,7 @@ class uvcROSDriver {
   bool uvc_cb_flag_ = false;
   bool first_imu_received_flag_ = false;
   bool serial_port_open_ = false;
+  bool adis_enabled_ = true;
 
   int n_cameras_ = 2;
   int raw_width_ = 752 + 16;  // 376+16;//
@@ -162,7 +163,7 @@ class uvcROSDriver {
   bool extractAndTranslateTimestamp(size_t line, bool update_translator,
                                     uvc_frame_t *frame, ros::Time *stamp);
   static CamID extractCamId(uvc_frame_t *frame);
-  static uint8_t extractImuId(uvc_frame_t *frame);
+  uint8_t extractImuId(uvc_frame_t *frame);
   static uint8_t extractImuCount(size_t line, uvc_frame_t *frame);
   bool extractImuData(size_t line, uvc_frame_t *frame, sensor_msgs::Imu *msg);
   static double extractImuElementData(size_t imu_idx, ImuElement element,
@@ -221,25 +222,25 @@ class uvcROSDriver {
     int camera_config;
     switch (n_cameras_) {
       case 10:
-        camera_config = 0x3FE;
+        camera_config = 0x3FF;
         break;
       case 8:
-        camera_config = 0x00E;
+        camera_config = 0x1EF;
         break;
       case 6:
-        camera_config = 0x0E6;
+        camera_config = 0x0E7;
         break;
       case 4:
-        camera_config = 0x062;
+        camera_config = 0x063;
         break;
       case 2:
       default:
-        camera_config = 0x020;
+        camera_config = 0x021;
         break;
     }
 
-    if (raw_enabled_) {
-      ++camera_config;
+    if (!raw_enabled_) {
+      camera_config = camera_config & 0xFF0;
     }
 
     return camera_config;

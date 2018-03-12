@@ -158,6 +158,8 @@ void uvcROSDriver::initDevice() {
     prev_topic = topic;
   }
 
+  imu_pubs_.emplace_back(nh_.advertise<sensor_msgs::Imu>("adis_imu", kIMUQueueSize));
+
   info_cams_.resize(n_cameras_);
 
   // time translator
@@ -452,88 +454,7 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
             cams[i].projection_model_.r2_, 0);
       }
     }
-
-    // TODO: implement with class variables
-    // SGM stereo penalty values p1: discontinuits, p2:
-    setParam("STEREO_P1_CAM1", 10.0f);
-    setParam("STEREO_P2_CAM1", 250.0f);
-    // disparity L->R occlusion in px
-    setParam("STEREO_LR_CAM1", 3.0f);
-    // threshold 0-255 valid disparity
-    setParam("STEREO_TH_CAM1", 140.0f);
-    setParam("STEREO_FP_CAM1", 0.0f);
-    setParam("STEREO_CE_CAM1", 0.0f);
-    setParam("STEREO_RE_CAM1", 0.0f);
-    setParam("STEREO_OF_CAM1", 0.0f);
-
-    setParam("STEREO_MP_01", 0.0f);
-    setParam("STEREO_BAYER_D", 0.0f);
-    setParam("IMU_ENABLE", static_cast<float>(n_cameras_));
-    setParam("ADIS_IMU", 0.0f);
-
-    setParam("STEREO_P1_CAM3", 10.0f);
-    setParam("STEREO_P2_CAM3", 250.0f);
-    setParam("STEREO_LR_CAM3", 3.0f);
-    setParam("STEREO_TH_CAM3", 140.0f);
-    setParam("STEREO_FP_CAM3", 0.0f);
-    setParam("STEREO_CE_CAM3", 0.0f);
-    setParam("STEREO_RE_CAM3", 0.0f);
-    setParam("STEREO_OF_CAM3", 0.0f);
-
-    setParam("STEREO_P1_CAM5", 16.0f);
-    setParam("STEREO_P2_CAM5", 240.0f);
-    setParam("STEREO_LR_CAM5", 4.0f);
-    setParam("STEREO_TH_CAM5", 120.0f);
-    setParam("STEREO_FP_CAM5", 0.0f);
-    setParam("STEREO_CE_CAM5", 0.0f);
-    setParam("STEREO_RE_CAM5", 0.0f);
-    setParam("STEREO_OF_CAM5", 0.0f);
-
-    setParam("STEREO_P1_CAM7", 16.0f);
-    setParam("STEREO_P2_CAM7", 240.0f);
-    setParam("STEREO_LR_CAM7", 4.0f);
-    setParam("STEREO_TH_CAM7", 120.0f);
-    setParam("STEREO_FP_CAM7", 0.0f);
-    setParam("STEREO_CE_CAM7", 0.0f);
-    setParam("STEREO_RE_CAM7", 0.0f);
-    setParam("STEREO_OF_CAM7", 0.0f);
-
-    setParam("STEREO_P1_CAM9", 16.0f);
-    setParam("STEREO_P2_CAM9", 240.0f);
-    setParam("STEREO_LR_CAM9", 4.0f);
-    setParam("STEREO_TH_CAM9", 120.0f);
-    setParam("STEREO_FP_CAM9", 0.0f);
-    setParam("STEREO_CE_CAM9", 0.0f);
-    setParam("STEREO_RE_CAM9", 0.0f);
-    setParam("STEREO_OF_CAM9", 0.0f);
-
-    setParam("CALIB_GAIN", 4300.0f);
-
-    setParam("P_MODE", static_cast<float>(primary_camera_mode_));
-
-    setParam("IM_H_FLIP_CAM0", 1.0f);
-    setParam("IM_V_FLIP_CAM0", 1.0f);
-    setParam("IM_H_FLIP_CAM2", 1.0f);
-    setParam("IM_V_FLIP_CAM2", 1.0f);
-    setParam("IM_H_FLIP_CAM4", 1.0f);
-    setParam("IM_V_FLIP_CAM4", 1.0f);
-    setParam("IM_H_FLIP_CAM6", 1.0f);
-    setParam("IM_V_FLIP_CAM6", 1.0f);
-    setParam("IM_H_FLIP_CAM8", 0.0f);
-    setParam("IM_V_FLIP_CAM8", 0.0f);
-    setParam("IM_H_FLIP_CAM1", 0.0f);
-    setParam("IM_V_FLIP_CAM1", 0.0f);
-    setParam("IM_H_FLIP_CAM3", 0.0f);
-    setParam("IM_V_FLIP_CAM3", 0.0f);
-    setParam("IM_H_FLIP_CAM5", 0.0f);
-    setParam("IM_V_FLIP_CAM5", 0.0f);
-    setParam("IM_H_FLIP_CAM7", 0.0f);
-    setParam("IM_V_FLIP_CAM7", 0.0f);
-    setParam("IM_H_FLIP_CAM9", 1.0f);
-    setParam("IM_V_FLIP_CAM9", 1.0f);
   }
-
-  setParam("SETCALIB", float(set_calibration_));
 
   setParam("RESETMT9V034", 1.0f);
   setParam("RESETICM20608", 1.0f);
@@ -542,18 +463,95 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
 void uvcROSDriver::dynamicReconfigureCallback(
     uvc_ros_driver::UvcDriverConfig &config, uint32_t level) {
   if (!shutdown_) {
+
     setParam("CAMERA_AUTOEXP", static_cast<float>(config.CAMERA_AUTOEXP));
     setParam("CAMERA_EXP", static_cast<float>(config.CAMERA_EXP));
     setParam("CAMERA_MIN_E", static_cast<float>(config.CAMERA_MIN_E));
     setParam("CAMERA_MAX_E", static_cast<float>(config.CAMERA_MAX_E));
     setParam("CAMERA_AUTOG", static_cast<float>(config.CAMERA_AUTOG));
     setParam("CAMERA_GAIN", static_cast<float>(config.CAMERA_GAIN));
+    setParam("STEREO_BAYER_D", static_cast<float>(config.STEREO_BAYER_D));
+
     primary_camera_mode_ = config.PRIMARY_CAM_MODE;
     setParam("P_MODE", static_cast<float>(config.PRIMARY_CAM_MODE));
-
+    
+    adis_enabled_ = config.ADIS_IMU;
     setParam("ADIS_IMU", static_cast<float>(config.ADIS_IMU));
-    // update camera parameters in FPGA
+
+    raw_enabled_ = config.RAW_ENABLED;
+    setParam("CAMERA_ENABLE", static_cast<float>(buildCameraConfig()));
+
+    setParam("IM_H_FLIP_CAM0", static_cast<float>(config.CAMERA_0_HFLIP));
+    setParam("IM_V_FLIP_CAM0", static_cast<float>(config.CAMERA_0_VFLIP));
+    setParam("IM_H_FLIP_CAM1", static_cast<float>(config.CAMERA_1_HFLIP));
+    setParam("IM_V_FLIP_CAM1", static_cast<float>(config.CAMERA_1_VFLIP));
+    setParam("IM_H_FLIP_CAM2", static_cast<float>(config.CAMERA_2_HFLIP));
+    setParam("IM_V_FLIP_CAM2", static_cast<float>(config.CAMERA_2_VFLIP));
+    setParam("IM_H_FLIP_CAM3", static_cast<float>(config.CAMERA_3_HFLIP));
+    setParam("IM_V_FLIP_CAM3", static_cast<float>(config.CAMERA_3_VFLIP));
+    setParam("IM_H_FLIP_CAM4", static_cast<float>(config.CAMERA_4_HFLIP));
+    setParam("IM_V_FLIP_CAM4", static_cast<float>(config.CAMERA_4_VFLIP));
+    setParam("IM_H_FLIP_CAM5", static_cast<float>(config.CAMERA_5_HFLIP));
+    setParam("IM_V_FLIP_CAM5", static_cast<float>(config.CAMERA_5_VFLIP));
+    setParam("IM_H_FLIP_CAM6", static_cast<float>(config.CAMERA_6_HFLIP));
+    setParam("IM_V_FLIP_CAM6", static_cast<float>(config.CAMERA_6_VFLIP));
+    setParam("IM_H_FLIP_CAM7", static_cast<float>(config.CAMERA_7_HFLIP));
+    setParam("IM_V_FLIP_CAM7", static_cast<float>(config.CAMERA_7_VFLIP));
+    setParam("IM_H_FLIP_CAM8", static_cast<float>(config.CAMERA_8_HFLIP));
+    setParam("IM_V_FLIP_CAM8", static_cast<float>(config.CAMERA_8_VFLIP));
+    setParam("IM_H_FLIP_CAM9", static_cast<float>(config.CAMERA_9_HFLIP));
+    setParam("IM_V_FLIP_CAM9", static_cast<float>(config.CAMERA_9_VFLIP));
+    
+    //update camera parameters in FPGA
     setParam("UPDATEMT9V034", 1.0f);
+
+    setParam("STEREO_FP_CAM1", static_cast<float>(config.STEREO_FP_CAM1));
+    setParam("STEREO_RE_CAM1", static_cast<float>(config.STEREO_RE_CAM1));
+    setParam("STEREO_CE_CAM1", static_cast<float>(config.STEREO_CE_CAM1));
+    setParam("STEREO_TH_CAM1", static_cast<float>(config.STEREO_TH_CAM1));
+    setParam("STEREO_LR_CAM1", static_cast<float>(config.STEREO_LR_CAM1));
+    setParam("STEREO_OF_CAM1", static_cast<float>(config.STEREO_OF_CAM1));
+    setParam("STEREO_P1_CAM1", static_cast<float>(config.STEREO_P1_CAM1));
+    setParam("STEREO_P2_CAM1", static_cast<float>(config.STEREO_P2_CAM1));
+
+    setParam("STEREO_FP_CAM3", static_cast<float>(config.STEREO_FP_CAM3));
+    setParam("STEREO_RE_CAM3", static_cast<float>(config.STEREO_RE_CAM3));
+    setParam("STEREO_CE_CAM3", static_cast<float>(config.STEREO_CE_CAM3));
+    setParam("STEREO_TH_CAM3", static_cast<float>(config.STEREO_TH_CAM3));
+    setParam("STEREO_LR_CAM3", static_cast<float>(config.STEREO_LR_CAM3));
+    setParam("STEREO_OF_CAM3", static_cast<float>(config.STEREO_OF_CAM3));
+    setParam("STEREO_P1_CAM3", static_cast<float>(config.STEREO_P1_CAM3));
+    setParam("STEREO_P2_CAM3", static_cast<float>(config.STEREO_P2_CAM3));
+
+    setParam("STEREO_FP_CAM5", static_cast<float>(config.STEREO_FP_CAM5));
+    setParam("STEREO_RE_CAM5", static_cast<float>(config.STEREO_RE_CAM5));
+    setParam("STEREO_CE_CAM5", static_cast<float>(config.STEREO_CE_CAM5));
+    setParam("STEREO_TH_CAM5", static_cast<float>(config.STEREO_TH_CAM5));
+    setParam("STEREO_LR_CAM5", static_cast<float>(config.STEREO_LR_CAM5));
+    setParam("STEREO_OF_CAM5", static_cast<float>(config.STEREO_OF_CAM5));
+    setParam("STEREO_P1_CAM5", static_cast<float>(config.STEREO_P1_CAM5));
+    setParam("STEREO_P2_CAM5", static_cast<float>(config.STEREO_P2_CAM5));
+
+    setParam("STEREO_FP_CAM7", static_cast<float>(config.STEREO_FP_CAM7));
+    setParam("STEREO_RE_CAM7", static_cast<float>(config.STEREO_RE_CAM7));
+    setParam("STEREO_CE_CAM7", static_cast<float>(config.STEREO_CE_CAM7));
+    setParam("STEREO_TH_CAM7", static_cast<float>(config.STEREO_TH_CAM7));
+    setParam("STEREO_LR_CAM7", static_cast<float>(config.STEREO_LR_CAM7));
+    setParam("STEREO_OF_CAM7", static_cast<float>(config.STEREO_OF_CAM7));
+    setParam("STEREO_P1_CAM7", static_cast<float>(config.STEREO_P1_CAM7));
+    setParam("STEREO_P2_CAM7", static_cast<float>(config.STEREO_P2_CAM7));
+
+    setParam("STEREO_FP_CAM9", static_cast<float>(config.STEREO_FP_CAM9));
+    setParam("STEREO_RE_CAM9", static_cast<float>(config.STEREO_RE_CAM9));
+    setParam("STEREO_CE_CAM9", static_cast<float>(config.STEREO_CE_CAM9));
+    setParam("STEREO_TH_CAM9", static_cast<float>(config.STEREO_TH_CAM9));
+    setParam("STEREO_LR_CAM9", static_cast<float>(config.STEREO_LR_CAM9));
+    setParam("STEREO_OF_CAM9", static_cast<float>(config.STEREO_OF_CAM9));
+    setParam("STEREO_P1_CAM9", static_cast<float>(config.STEREO_P1_CAM9));
+    setParam("STEREO_P2_CAM9", static_cast<float>(config.STEREO_P2_CAM9));
+
+    //update stereo parameters in FPGA
+    setParam("SETCALIB", 1.0f);
 
     raw_enabled_ = config.RAW_ENABLED;
     setParam("CAMERA_ENABLE", static_cast<float>(buildCameraConfig()));
@@ -708,6 +706,11 @@ CamID uvcROSDriver::extractCamId(uvc_frame_t *frame) {
 }
 
 uint8_t uvcROSDriver::extractImuId(uvc_frame_t *frame) {
+
+  if(adis_enabled_){
+    return imu_pubs_.size() -1;
+  }
+  
   constexpr size_t kImuIdOffset = 8;
   constexpr size_t kImuIdLine = 0;
   constexpr uint8_t kImuIdMask = 0x0F;
