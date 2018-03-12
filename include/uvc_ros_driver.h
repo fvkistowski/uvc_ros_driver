@@ -102,7 +102,7 @@ class uvcROSDriver {
   int raw_height_ = 480;      // 240;//
   int width_ = raw_width_ - 16;
   int height_ = raw_height_;
-  int frameCounter_ = 0;
+  int frame_counter_ = 0;
   int modulo_ = 1;
   int calibration_mode_ = 0;
   bool shutdown_ = 0;
@@ -116,6 +116,10 @@ class uvcROSDriver {
   // Dynamic reconfigure.
   dynamic_reconfigure::Server<uvc_ros_driver::UvcDriverConfig>
       dynamic_reconfigure_;
+
+  // disparity filtering
+  int max_speckle_size_;
+  int max_speckle_diff_;
 
   CameraParameters camera_params_;
   // serial port
@@ -163,8 +167,9 @@ class uvcROSDriver {
   bool extractImuData(size_t line, uvc_frame_t *frame, sensor_msgs::Imu *msg);
   static double extractImuElementData(size_t imu_idx, ImuElement element,
                                       uvc_frame_t *frame);
-  static void extractImages(uvc_frame_t *frame,
-                            ait_ros_messages::VioSensorMsg *msg_vio);
+  void extractImages(uvc_frame_t *frame,
+                     ait_ros_messages::VioSensorMsg *msg_vio,
+                     const bool is_raw_images);
 
   uvc_error_t initAndOpenUvc();
   int setParam(const std::string &name, float val);

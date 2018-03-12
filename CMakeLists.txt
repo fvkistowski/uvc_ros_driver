@@ -9,6 +9,8 @@ catkin_simple(ALL_DEPS_REQUIRED)
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
+find_package(OpenCV 3 REQUIRED COMPONENTS core calib3d)
+
 find_package(libuvc REQUIRED)
 
 ###########
@@ -36,6 +38,7 @@ cs_add_executable(uvc_ros_driver_node
 
 target_link_libraries(uvc_ros_driver
   ${libuvc_LIBRARIES}
+  ${OpenCV_LIBRARIES}
 )
 
 target_link_libraries(uvc_ros_driver_node

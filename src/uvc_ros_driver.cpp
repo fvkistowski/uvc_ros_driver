@@ -44,6 +44,8 @@
 #include <iostream>
 
 #include <cv_bridge/cv_bridge.h>
+#include <opencv2/calib3d/calib3d.hpp>
+
 #include <sensor_msgs/image_encodings.h>
 
 #include "uvc_ros_driver.h"
@@ -546,6 +548,7 @@ void uvcROSDriver::dynamicReconfigureCallback(
     setParam("CAMERA_MAX_E", static_cast<float>(config.CAMERA_MAX_E));
     setParam("CAMERA_AUTOG", static_cast<float>(config.CAMERA_AUTOG));
     setParam("CAMERA_GAIN", static_cast<float>(config.CAMERA_GAIN));
+    primary_camera_mode_ = config.PRIMARY_CAM_MODE;
     setParam("P_MODE", static_cast<float>(config.PRIMARY_CAM_MODE));
 
     setParam("ADIS_IMU", static_cast<float>(config.ADIS_IMU));
@@ -565,6 +568,9 @@ void uvcROSDriver::dynamicReconfigureCallback(
     setParam("STEREO_BAYER_D", static_cast<float>(config.STEREO_BAYER_D));
     // update stereo parameters in FPGA
     setParam("SETCALIB", 1.0f);
+
+    max_speckle_size_ = config.MAX_SPECKLE_SIZE;
+    max_speckle_diff_ = config.MAX_SPECKLE_DIFF;
   }
 }
 
@@ -763,13 +769,22 @@ double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
 }
 
 void uvcROSDriver::extractImages(uvc_frame_t *frame,
-                                 ait_ros_messages::VioSensorMsg *msg_vio) {
+                                 ait_ros_messages::VioSensorMsg *msg_vio,
+                                 const bool is_raw_images) {
   // read the image data and separate the 2 images
   const cv::Mat input_image(frame->height, frame->width, CV_8UC2, frame->data);
 
   cv::Mat split_images[2];
   cv::split(input_image(cv::Rect(0, 0, frame->width - 16, frame->height)),
             split_images);
+
+  // if second channel is the disparity, apply filtering
+  if (!is_raw_images) {
+    split_images[1].convertTo(split_images[1], CV_16SC1);
+    cv::filterSpeckles(split_images[1], 0, max_speckle_size_,
+                       max_speckle_diff_);
+    split_images[1].convertTo(split_images[1], CV_8UC1);
+  }
 
   cv_bridge::CvImage left;
   left.encoding = sensor_msgs::image_encodings::MONO8;
@@ -805,7 +820,8 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
   const uint8_t imu_id = extractImuId(frame);
   const CamID cam_id = extractCamId(frame);
 
-  const uint16_t frame_counter_cam = ((n_cameras_ < 9) || primary_camera_mode_) ? 0 : 8;
+  const uint16_t frame_counter_cam =
+      ((n_cameras_ < 9) || primary_camera_mode_) ? 0 : 8;
 
   static ros::Time frame_time;
   if ((cam_id.left_cam_num == frame_counter_cam) &&
@@ -813,7 +829,7 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     if (!extractAndTranslateTimestamp(0, true, frame, &frame_time)) {
       ROS_ERROR("Invalid timestamp, dropping frame");
     }
-    frameCounter_++;
+    frame_counter_++;
   }
 
   static uint8_t prev_count = 0;
@@ -853,7 +869,7 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
   ROS_DEBUG("%lu imu messages", msg_vio.imu.size());
   ROS_DEBUG("imu id: %d ", imu_id);
 
-  extractImages(frame, &msg_vio);
+  extractImages(frame, &msg_vio, cam_id.is_raw_images);
 
   if (cam_id.right_cam_num >= n_cameras_) {
     ROS_ERROR_STREAM("Tried to publish to camera " << cam_id.right_cam_num);
@@ -870,7 +886,7 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     msg_vio.right_image.header.frame_id =
         "cam_" + std::to_string(cam_id.right_cam_num) + "_optical_frame";
 
-    if (frameCounter_ % modulo_ != 0) {
+    if (frame_counter_ % modulo_ != 0) {
       return;
     }
 
