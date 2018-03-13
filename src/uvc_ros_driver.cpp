@@ -43,9 +43,6 @@
 #include <functional>
 #include <iostream>
 
-#include <cv_bridge/cv_bridge.h>
-#include <opencv2/calib3d/calib3d.hpp>
-
 #include <sensor_msgs/image_encodings.h>
 
 #include "uvc_ros_driver.h"
@@ -162,6 +159,11 @@ void uvcROSDriver::initDevice() {
       nh_.advertise<sensor_msgs::Imu>("adis_imu", kIMUQueueSize));
 
   info_cams_.resize(n_cameras_);
+
+  pointcloud_pub_ =
+      nh_.advertise<sensor_msgs::PointCloud2>("pointcloud", kCamQueueSize);
+  freespace_pointcloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(
+      "freespace_pointcloud", kCamQueueSize);
 
   // time translator
   constexpr int kSecondsToMicroSeconds = 1e6;
@@ -770,33 +772,164 @@ double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
   return data;
 }
 
-void uvcROSDriver::extractImages(uvc_frame_t *frame,
-                                 ait_ros_messages::VioSensorMsg *msg_vio,
-                                 const bool is_raw_images) {
+void uvcROSDriver::extractImages(uvc_frame_t *frame, const bool is_raw_images,
+                                 cv::Mat *images) {
   // read the image data and separate the 2 images
   const cv::Mat input_image(frame->height, frame->width, CV_8UC2, frame->data);
 
-  cv::Mat split_images[2];
   cv::split(input_image(cv::Rect(0, 0, frame->width - 16, frame->height)),
-            split_images);
+            images);
 
   // if second channel is the disparity, apply filtering
   if (!is_raw_images) {
-    split_images[1].convertTo(split_images[1], CV_16SC1);
-    cv::filterSpeckles(split_images[1], 0, max_speckle_size_,
-                       max_speckle_diff_);
-    split_images[1].convertTo(split_images[1], CV_8UC1);
+    images[1].convertTo(images[1], CV_16SC1);
+    cv::filterSpeckles(images[1], 0, max_speckle_size_, max_speckle_diff_);
+    images[1].convertTo(images[1], CV_8UC1);
+  }
+}
+
+// simply replaces invalid disparity values with a valid value found by scanning
+// horizontally (note: if disparity values are already valid or if no valid
+// value can be found int_max is inserted)
+void uvcROSDriver::fillDisparityFromSide(const cv::Mat &input_disparity,
+                                         const cv::Mat &valid,
+                                         const bool &from_left,
+                                         cv::Mat *filled_disparity) {
+  *filled_disparity =
+      cv::Mat(input_disparity.rows, input_disparity.cols, CV_8UC1);
+
+  for (size_t y_pixels = 0; y_pixels < input_disparity.rows; ++y_pixels) {
+    bool prev_valid = false;
+    uint8_t prev_value;
+
+    for (size_t x_pixels = 0; x_pixels < input_disparity.cols; ++x_pixels) {
+      size_t x_scan;
+      if (from_left) {
+        x_scan = x_pixels;
+      } else {
+        x_scan = (input_disparity.cols - x_pixels - 1);
+      }
+
+      if (valid.at<uint8_t>(y_pixels, x_scan)) {
+        prev_valid = true;
+        prev_value = input_disparity.at<uint8_t>(y_pixels, x_scan);
+        filled_disparity->at<uint8_t>(y_pixels, x_scan) =
+            std::numeric_limits<uint8_t>::max();
+      } else if (prev_valid) {
+        filled_disparity->at<uint8_t>(y_pixels, x_scan) = prev_value;
+      } else {
+        filled_disparity->at<uint8_t>(y_pixels, x_scan) =
+            std::numeric_limits<uint8_t>::max();
+      }
+    }
+  }
+}
+
+void uvcROSDriver::bulidFilledDisparityImage(const cv::Mat &input_disparity,
+                                             cv::Mat *disparity_filled,
+                                             cv::Mat *input_valid) {
+  // mark valid pixels
+  *input_valid = cv::Mat(input_disparity.rows, input_disparity.cols, CV_8U);
+
+  for (size_t y_pixels = 0; y_pixels < input_disparity.rows; ++y_pixels) {
+    for (size_t x_pixels = 0; x_pixels < input_disparity.cols; ++x_pixels) {
+      if (input_disparity.at<uint8_t>(y_pixels, x_pixels) == 0) {
+        input_valid->at<uint8_t>(y_pixels, x_pixels) = 0;
+      } else {
+        input_valid->at<uint8_t>(y_pixels, x_pixels) = 1;
+      }
+    }
   }
 
-  cv_bridge::CvImage left;
-  left.encoding = sensor_msgs::image_encodings::MONO8;
-  left.image = split_images[0];
-  msg_vio->left_image = *left.toImageMsg();
+  // take a guess for the depth of the invalid pixels by scanning along the row
+  // and giving them the same value as the closest horizontal point.
+  cv::Mat disparity_filled_left, disparity_filled_right;
+  fillDisparityFromSide(input_disparity, *input_valid, true,
+                        &disparity_filled_left);
+  fillDisparityFromSide(input_disparity, *input_valid, false,
+                        &disparity_filled_right);
 
-  cv_bridge::CvImage right;
-  right.encoding = sensor_msgs::image_encodings::MONO8;
-  right.image = split_images[1];
-  msg_vio->right_image = *right.toImageMsg();
+  // take the most conservative disparity of the two
+  *disparity_filled = cv::max(disparity_filled_left, disparity_filled_right);
+}
+
+void uvcROSDriver::calcPointCloud(
+    const cv::Mat &input_disparity, const cv::Mat &left_image,
+    const size_t cam_num, pcl::PointCloud<pcl::PointXYZRGB> *pointcloud,
+    pcl::PointCloud<pcl::PointXYZRGB> *freespace_pointcloud) const {
+  const double focal_length = info_cams_[cam_num].K[0];
+  const double cx = info_cams_[cam_num].K[2];
+  const double cy = info_cams_[cam_num].K[5];
+
+  const double baseline =
+      -camera_params_.StereoTransformationMatrix[cam_num / 2 + 1][0][3];
+
+  pointcloud->clear();
+  freespace_pointcloud->clear();
+
+  if (left_image.depth() != CV_8U) {
+    ROS_ERROR(
+        "Pointcloud generation is currently only supported on 8 bit images");
+    return;
+  }
+
+  cv::Mat disparity_filled, input_valid;
+  bulidFilledDisparityImage(input_disparity, &disparity_filled, &input_valid);
+
+  // build pointcloud
+  for (int y_pixels = 0; y_pixels < input_disparity.rows; ++y_pixels) {
+    for (int x_pixels = 0; x_pixels < input_disparity.cols; ++x_pixels) {
+      const uint8_t &is_valid = input_valid.at<uint8_t>(y_pixels, x_pixels);
+      const uint8_t &input_value =
+          input_disparity.at<uint8_t>(y_pixels, x_pixels);
+      const uint8_t &filled_value =
+          disparity_filled.at<uint8_t>(y_pixels, x_pixels);
+
+      bool freespace;
+      double disparity_value;
+
+      // if the filled disparity is valid it must be a freespace ray
+      if (filled_value < std::numeric_limits<uint8_t>::max()) {
+        disparity_value = static_cast<double>(filled_value);
+        freespace = true;
+      }
+      // else it is a normal ray
+      else if (is_valid) {
+        disparity_value = static_cast<double>(input_value);
+        freespace = false;
+      } else {
+        continue;
+      }
+
+      pcl::PointXYZRGB point;
+
+      point.z = (focal_length * baseline) / disparity_value;
+      point.x = point.z * (x_pixels - cx) / focal_length;
+      point.y = point.z * (y_pixels - cy) / focal_length;
+
+      if (left_image.channels() == 3) {
+        const cv::Vec3b &color = left_image.at<cv::Vec3b>(y_pixels, x_pixels);
+        point.b = color[0];
+        point.g = color[1];
+        point.r = color[2];
+      } else if (left_image.channels() == 4) {
+        const cv::Vec4b &color = left_image.at<cv::Vec4b>(y_pixels, x_pixels);
+        point.b = color[0];
+        point.g = color[1];
+        point.r = color[2];
+      } else {
+        point.b = left_image.at<uint8_t>(y_pixels, x_pixels);
+        point.g = point.b;
+        point.r = point.b;
+      }
+
+      if (freespace) {
+        freespace_pointcloud->push_back(point);
+      } else {
+        pointcloud->push_back(point);
+      }
+    }
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -871,7 +1004,18 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
   ROS_DEBUG("%lu imu messages", msg_vio.imu.size());
   ROS_DEBUG("imu id: %d ", imu_id);
 
-  extractImages(frame, &msg_vio, cam_id.is_raw_images);
+  cv::Mat images[2];
+  extractImages(frame, cam_id.is_raw_images, images);
+
+  cv_bridge::CvImage left;
+  left.encoding = sensor_msgs::image_encodings::MONO8;
+  left.image = images[0];
+  msg_vio.left_image = *left.toImageMsg();
+
+  cv_bridge::CvImage right;
+  right.encoding = sensor_msgs::image_encodings::MONO8;
+  right.image = images[1];
+  msg_vio.right_image = *right.toImageMsg();
 
   if (cam_id.right_cam_num >= n_cameras_) {
     ROS_ERROR_STREAM("Tried to publish to camera " << cam_id.right_cam_num);
@@ -903,6 +1047,22 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     // publish images
     cam_rect_pubs_[cam_id.left_cam_num / 2].publish(msg_vio.left_image);
     cam_disp_pubs_[cam_id.right_cam_num / 2].publish(msg_vio.right_image);
+
+    /*if (cam_id.left_cam_num == 0) {
+      pcl::PointCloud<pcl::PointXYZRGB> pointcloud, freespace_pointcloud;
+      calcPointCloud(images[1], images[0], cam_id.left_cam_num, &pointcloud,
+                     &freespace_pointcloud);
+
+      sensor_msgs::PointCloud2 pointcloud_msg;
+      pcl::toROSMsg(pointcloud, pointcloud_msg);
+      pointcloud_msg.header = msg_vio.left_image.header;
+      pointcloud_pub_.publish(pointcloud_msg);
+
+      sensor_msgs::PointCloud2 freespace_pointcloud_msg;
+      pcl::toROSMsg(freespace_pointcloud, freespace_pointcloud_msg);
+      freespace_pointcloud_msg.header = msg_vio.left_image.header;
+      freespace_pointcloud_pub_.publish(freespace_pointcloud_msg);
+    }*/
   }
 
   setCameraInfoHeader(info_cams_[cam_id.left_cam_num], width_, height_,

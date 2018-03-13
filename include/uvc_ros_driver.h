@@ -59,6 +59,9 @@
 
 #include <cuckoo_time_translator/DeviceTimeTranslator.h>
 
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/calib3d/calib3d.hpp>
+
 #include <dynamic_reconfigure/server.h>
 #include <ros/package.h>
 #include <ros/ros.h>
@@ -68,8 +71,11 @@
 #include <sensor_msgs/fill_image.h>
 #include <std_msgs/String.h>
 
-#include <tf/transform_broadcaster.h>
 #include <image_transport/image_transport.h>
+#include <tf/transform_broadcaster.h>
+
+#include <pcl_conversions/pcl_conversions.h>
+#include <sensor_msgs/PointCloud2.h>
 
 #include <algorithm>
 #include <string>
@@ -146,6 +152,10 @@ class uvcROSDriver {
 
   std::vector<ros::Publisher> imu_pubs_;
 
+  // pointcloud publishers
+  ros::Publisher pointcloud_pub_;
+  ros::Publisher freespace_pointcloud_pub_;
+
   // tf broadcaster
   tf::TransformBroadcaster br_;
 
@@ -172,9 +182,7 @@ class uvcROSDriver {
   bool extractImuData(size_t line, uvc_frame_t *frame, sensor_msgs::Imu *msg);
   static double extractImuElementData(size_t imu_idx, ImuElement element,
                                       uvc_frame_t *frame);
-  void extractImages(uvc_frame_t *frame,
-                     ait_ros_messages::VioSensorMsg *msg_vio,
-                     const bool is_raw_images);
+  void extractImages(uvc_frame_t *frame, const bool is_raw_images, cv::Mat *images);
 
   uvc_error_t initAndOpenUvc();
   int setParam(const std::string &name, float val);
@@ -190,6 +198,19 @@ class uvcROSDriver {
                                   uint32_t level);
 
   inline void selectCameraInfo(int camera, sensor_msgs::CameraInfo **ci);
+
+  static void fillDisparityFromSide(const cv::Mat &input_disparity,
+                                    const cv::Mat &valid, const bool &from_left,
+                                    cv::Mat *filled_disparity);
+
+  static void bulidFilledDisparityImage(const cv::Mat &input_disparity,
+                                        cv::Mat *disparity_filled,
+                                        cv::Mat *input_valid);
+
+  void calcPointCloud(
+      const cv::Mat &input_disparity, const cv::Mat &left_image,
+      const size_t cam_num, pcl::PointCloud<pcl::PointXYZRGB> *pointcloud,
+      pcl::PointCloud<pcl::PointXYZRGB> *freespace_pointcloud) const;
 
  public:
   uvcROSDriver(ros::NodeHandle nh) : nh_(nh), it_(nh_){};
