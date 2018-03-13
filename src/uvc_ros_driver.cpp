@@ -165,6 +165,9 @@ void uvcROSDriver::initDevice() {
   freespace_pointcloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(
       "freespace_pointcloud", kCamQueueSize);
 
+  // watchdog (Sometimes the camera randomly stops giving callbacks when plugged in for the first time)
+  watchdog_timer_ = nh_.createTimer(ros::Duration(0.05), &uvcROSDriver::watchdogCallback, this, true);
+
   // time translator
   constexpr int kSecondsToMicroSeconds = 1e6;
   constexpr int kTimerBits = 32;
@@ -215,6 +218,23 @@ void uvcROSDriver::initDevice() {
     // set flag for completed initializiation
     device_initialized_ = true;
   }
+}
+
+void uvcROSDriver::watchdogCallback(const ros::TimerEvent&){
+
+  if(uvc_cb_flag_ && !still_alive_){
+    ROS_ERROR("Watchdog triggered, camera stopped outputting images, trying to restart");
+    uvc_cb_flag_ = false;
+
+    uvc_start_streaming(devh_, &ctrl_, &callback, this, 0);
+
+    watchdog_timer_.setPeriod(ros::Duration(kWatchdogRestartTime));
+    watchdog_timer_.start();
+  }
+  still_alive_ = false;
+
+  watchdog_timer_.setPeriod(ros::Duration(kWatchdogTimeout));
+  watchdog_timer_.start();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -569,6 +589,8 @@ void uvcROSDriver::dynamicReconfigureCallback(
     // update stereo parameters in FPGA
     setParam("SETCALIB", 1.0f);
 
+    gen_pointcloud_ = config.GEN_POINTCLOUD;
+    speckle_filter_ = config.SPECKLE_FILTER;
     max_speckle_size_ = config.MAX_SPECKLE_SIZE;
     max_speckle_diff_ = config.MAX_SPECKLE_DIFF;
   }
@@ -750,12 +772,17 @@ double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
   constexpr double kGravity = 9.807;
 
   // Standard IMU
-  // constexpr double kAccScaleFactor = kGravity / 16384.0;
-  // constexpr double kGyrScaleFactor = kDeg2Rad / 131.0;
+  double acc_scale_factor = kGravity;
+  double gyro_scale_factor = kDeg2Rad;
 
-  // Scaling factors for ADIS.
-  constexpr double kAccScaleFactor = kGravity / 4000.0;
-  constexpr double kGyrScaleFactor = kDeg2Rad / 100.0;
+  if(adis_enabled_){
+    acc_scale_factor /= 4000.0;
+    gyro_scale_factor /= 100.0;
+  }
+  else{
+    acc_scale_factor /= 16384.0;
+    gyro_scale_factor /= 131.0;
+  }
 
   constexpr size_t kImuDataOffset = 8;
 
@@ -764,10 +791,10 @@ double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
 
   if (element == ImuElement::AX || element == ImuElement::AY ||
       element == ImuElement::AZ) {
-    data *= kAccScaleFactor;
+    data *= acc_scale_factor;
   } else if (element == ImuElement::RX || element == ImuElement::RY ||
              element == ImuElement::RZ) {
-    data *= kGyrScaleFactor;
+    data *= gyro_scale_factor;
   }
   return data;
 }
@@ -777,11 +804,11 @@ void uvcROSDriver::extractImages(uvc_frame_t *frame, const bool is_raw_images,
   // read the image data and separate the 2 images
   const cv::Mat input_image(frame->height, frame->width, CV_8UC2, frame->data);
 
-  cv::split(input_image(cv::Rect(0, 0, frame->width - 16, frame->height)),
+  cv::split(input_image(cv::Rect(16, 0, frame->width - 32, frame->height)),
             images);
 
   // if second channel is the disparity, apply filtering
-  if (!is_raw_images) {
+  if (!is_raw_images && speckle_filter_) {
     images[1].convertTo(images[1], CV_16SC1);
     cv::filterSpeckles(images[1], 0, max_speckle_size_, max_speckle_diff_);
     images[1].convertTo(images[1], CV_8UC1);
@@ -833,7 +860,7 @@ void uvcROSDriver::bulidFilledDisparityImage(const cv::Mat &input_disparity,
 
   for (size_t y_pixels = 0; y_pixels < input_disparity.rows; ++y_pixels) {
     for (size_t x_pixels = 0; x_pixels < input_disparity.cols; ++x_pixels) {
-      if (input_disparity.at<uint8_t>(y_pixels, x_pixels) == 0) {
+      if (input_disparity.at<uint8_t>(y_pixels, x_pixels) < 32) {
         input_valid->at<uint8_t>(y_pixels, x_pixels) = 0;
       } else {
         input_valid->at<uint8_t>(y_pixels, x_pixels) = 1;
@@ -862,7 +889,7 @@ void uvcROSDriver::calcPointCloud(
   const double cy = info_cams_[cam_num].K[5];
 
   const double baseline =
-      -camera_params_.StereoTransformationMatrix[cam_num / 2 + 1][0][3];
+      -camera_params_.StereoTransformationMatrix[cam_num / 2][0][3];
 
   pointcloud->clear();
   freespace_pointcloud->clear();
@@ -903,7 +930,7 @@ void uvcROSDriver::calcPointCloud(
 
       pcl::PointXYZRGB point;
 
-      point.z = (focal_length * baseline) / disparity_value;
+      point.z = (16 * focal_length * baseline) / disparity_value;
       point.x = point.z * (x_pixels - cx) / focal_length;
       point.y = point.z * (y_pixels - cy) / focal_length;
 
@@ -948,6 +975,7 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     ROS_INFO("Stream started");
   }
   // flag
+  still_alive_ = true;
   uvc_cb_flag_ = true;
 
   ait_ros_messages::VioSensorMsg msg_vio;
@@ -1048,7 +1076,7 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     cam_rect_pubs_[cam_id.left_cam_num / 2].publish(msg_vio.left_image);
     cam_disp_pubs_[cam_id.right_cam_num / 2].publish(msg_vio.right_image);
 
-    /*if (cam_id.left_cam_num == 0) {
+    if (gen_pointcloud_) {
       pcl::PointCloud<pcl::PointXYZRGB> pointcloud, freespace_pointcloud;
       calcPointCloud(images[1], images[0], cam_id.left_cam_num, &pointcloud,
                      &freespace_pointcloud);
@@ -1062,7 +1090,7 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
       pcl::toROSMsg(freespace_pointcloud, freespace_pointcloud_msg);
       freespace_pointcloud_msg.header = msg_vio.left_image.header;
       freespace_pointcloud_pub_.publish(freespace_pointcloud_msg);
-    }*/
+    }
   }
 
   setCameraInfoHeader(info_cams_[cam_id.left_cam_num], width_, height_,

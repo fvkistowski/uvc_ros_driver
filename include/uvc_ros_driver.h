@@ -94,6 +94,9 @@ class uvcROSDriver {
  private:
   enum ImuElement { COUNT, TEMP, AX, AY, AZ, RX, RY, RZ };
 
+  static constexpr double kWatchdogTimeout = 0.05;
+  static constexpr double kWatchdogRestartTime = 1.0;
+
   bool device_initialized_ = false;
   bool enable_ait_vio_msg_ = false;
   bool primary_camera_mode_ = false;
@@ -104,6 +107,8 @@ class uvcROSDriver {
   bool first_imu_received_flag_ = false;
   bool serial_port_open_ = false;
   bool adis_enabled_ = true;
+  bool speckle_filter_ = false;
+  bool gen_pointcloud_ = false;
 
   int n_cameras_ = 2;
   int raw_width_ = 752 + 16;  // 376+16;//
@@ -159,6 +164,9 @@ class uvcROSDriver {
   // tf broadcaster
   tf::TransformBroadcaster br_;
 
+  ros::Timer watchdog_timer_;
+  bool still_alive_;
+
   // time translation
   std::unique_ptr<cuckoo_time_translator::UnwrappedDeviceTimeTranslator>
       device_time_translator_;
@@ -180,7 +188,7 @@ class uvcROSDriver {
   uint8_t extractImuId(uvc_frame_t *frame);
   static uint8_t extractImuCount(size_t line, uvc_frame_t *frame);
   bool extractImuData(size_t line, uvc_frame_t *frame, sensor_msgs::Imu *msg);
-  static double extractImuElementData(size_t imu_idx, ImuElement element,
+  double extractImuElementData(size_t imu_idx, ImuElement element,
                                       uvc_frame_t *frame);
   void extractImages(uvc_frame_t *frame, const bool is_raw_images, cv::Mat *images);
 
@@ -211,6 +219,8 @@ class uvcROSDriver {
       const cv::Mat &input_disparity, const cv::Mat &left_image,
       const size_t cam_num, pcl::PointCloud<pcl::PointXYZRGB> *pointcloud,
       pcl::PointCloud<pcl::PointXYZRGB> *freespace_pointcloud) const;
+
+  void watchdogCallback(const ros::TimerEvent&);
 
  public:
   uvcROSDriver(ros::NodeHandle nh) : nh_(nh), it_(nh_){};

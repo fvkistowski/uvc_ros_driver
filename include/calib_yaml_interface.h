@@ -49,8 +49,8 @@ inline CameraParameters parseYaml(const YAML::Node &node) {
   }
 
   //-------------------------camera transformation matrix---------------------
-  for (int h = 1; h < int(node.size()); h += 2) {
-    YAML::Node cam_tform_mat = node["cam" + std::to_string(h)]["T_cn_cnm1"];
+  for (int h = 0; h < int(node.size()/2); h++) {
+    YAML::Node cam_tform_mat = node["cam" + std::to_string(2*h+1)]["T_cn_cnm1"];
 
     for (std::size_t i = 0; i < cam_tform_mat.size(); i++) {
       for (std::size_t j = 0; j < cam_tform_mat[i].size(); j++) {
