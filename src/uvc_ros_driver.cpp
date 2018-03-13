@@ -158,7 +158,8 @@ void uvcROSDriver::initDevice() {
     prev_topic = topic;
   }
 
-  imu_pubs_.emplace_back(nh_.advertise<sensor_msgs::Imu>("adis_imu", kIMUQueueSize));
+  imu_pubs_.emplace_back(
+      nh_.advertise<sensor_msgs::Imu>("adis_imu", kIMUQueueSize));
 
   info_cams_.resize(n_cameras_);
 
@@ -463,7 +464,6 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
 void uvcROSDriver::dynamicReconfigureCallback(
     uvc_ros_driver::UvcDriverConfig &config, uint32_t level) {
   if (!shutdown_) {
-
     setParam("CAMERA_AUTOEXP", static_cast<float>(config.CAMERA_AUTOEXP));
     setParam("CAMERA_EXP", static_cast<float>(config.CAMERA_EXP));
     setParam("CAMERA_MIN_E", static_cast<float>(config.CAMERA_MIN_E));
@@ -474,7 +474,7 @@ void uvcROSDriver::dynamicReconfigureCallback(
 
     primary_camera_mode_ = config.PRIMARY_CAM_MODE;
     setParam("P_MODE", static_cast<float>(config.PRIMARY_CAM_MODE));
-    
+
     adis_enabled_ = config.ADIS_IMU;
     setParam("ADIS_IMU", static_cast<float>(config.ADIS_IMU));
 
@@ -501,8 +501,8 @@ void uvcROSDriver::dynamicReconfigureCallback(
     setParam("IM_V_FLIP_CAM8", static_cast<float>(config.CAMERA_8_VFLIP));
     setParam("IM_H_FLIP_CAM9", static_cast<float>(config.CAMERA_9_HFLIP));
     setParam("IM_V_FLIP_CAM9", static_cast<float>(config.CAMERA_9_VFLIP));
-    
-    //update camera parameters in FPGA
+
+    // update camera parameters in FPGA
     setParam("UPDATEMT9V034", 1.0f);
 
     setParam("STEREO_FP_CAM1", static_cast<float>(config.STEREO_FP_CAM1));
@@ -550,7 +550,7 @@ void uvcROSDriver::dynamicReconfigureCallback(
     setParam("STEREO_P1_CAM9", static_cast<float>(config.STEREO_P1_CAM9));
     setParam("STEREO_P2_CAM9", static_cast<float>(config.STEREO_P2_CAM9));
 
-    //update stereo parameters in FPGA
+    // update stereo parameters in FPGA
     setParam("SETCALIB", 1.0f);
 
     raw_enabled_ = config.RAW_ENABLED;
@@ -706,11 +706,10 @@ CamID uvcROSDriver::extractCamId(uvc_frame_t *frame) {
 }
 
 uint8_t uvcROSDriver::extractImuId(uvc_frame_t *frame) {
-
-  if(adis_enabled_){
-    return imu_pubs_.size() -1;
+  if (adis_enabled_) {
+    return imu_pubs_.size() - 1;
   }
-  
+
   constexpr size_t kImuIdOffset = 8;
   constexpr size_t kImuIdLine = 0;
   constexpr uint8_t kImuIdMask = 0x0F;
@@ -910,12 +909,20 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
                       frame_time, msg_vio.left_image.header.frame_id);
   cam_info_pubs_[cam_id.left_cam_num].publish(info_cams_[cam_id.left_cam_num]);
 
+  br_.sendTransform(tf::StampedTransform(
+      camera_params_.T_cam_imu[cam_id.left_cam_num], frame_time, "imu",
+      msg_vio.left_image.header.frame_id));
+
   if (cam_id.is_raw_images) {
     setCameraInfoHeader(info_cams_[cam_id.right_cam_num], width_, height_,
                         frame_time, msg_vio.right_image.header.frame_id);
 
     cam_info_pubs_[cam_id.right_cam_num].publish(
         info_cams_[cam_id.right_cam_num]);
+
+    br_.sendTransform(tf::StampedTransform(
+        camera_params_.T_cam_imu[cam_id.right_cam_num], frame_time, "imu",
+        msg_vio.right_image.header.frame_id));
   }
 }
 
