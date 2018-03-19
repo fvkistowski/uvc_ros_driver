@@ -103,18 +103,24 @@ inline CameraParameters parseYaml(const YAML::Node &node) {
 
   //-------------------------imu transform----------------------------
   for (int h = 0; h < int(node.size()); h++) {
-    YAML::Node T_raw = node["cam" + std::to_string(h)]["T_cam_imu"];
-
     tf::Matrix3x3 rot_mat;
     tf::Vector3 t_vec;
 
-    for (size_t col = 0; col < 3; ++col) {
-      for (size_t row = 0; row < 3; ++row) {
-        rot_mat[row][col] = T_raw[col][row].as<double>();
-      }
-      t_vec[col] = T_raw[col][3].as<double>();
-    }
+    if (node["cam" + std::to_string(h)]["T_cam_imu"]) {
+      YAML::Node T_raw = node["cam" + std::to_string(h)]["T_cam_imu"];
 
+      for (size_t col = 0; col < 3; ++col) {
+        for (size_t row = 0; row < 3; ++row) {
+          rot_mat[row][col] = T_raw[col][row].as<double>();
+        }
+        t_vec[col] = T_raw[col][3].as<double>();
+      }
+
+    } else {
+      WARN("cam%d-imu transformation not provided in calibration file. Set transformation to identity for now.", h);
+      rot_mat.setIdentity();
+      t_vec.setZero();
+    }
     v.T_cam_imu[h] = tf::Transform(rot_mat, t_vec);
   }
 
