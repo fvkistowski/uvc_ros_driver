@@ -995,43 +995,6 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     frame_counter_++;
   }
 
-  static uint8_t prev_count = 0;
-
-  // process the IMU data
-  bool is_first_imu_msg = true;
-
-  static int imu_msg_skip = 0;
-  constexpr int kNumImuToSkip = 18;
-
-  for (size_t i = 0; i < frame->height; ++i) {
-    sensor_msgs::Imu msg_imu;
-
-    const uint8_t count = extractImuCount(i, frame);
-
-    if ((count != prev_count) && extractImuData(i, frame, &msg_imu)) {
-      // the first imu message of a frame sometimes has a bad timestamp, as we
-      // get them at 862 Hz we just throw it out rather then try correct for
-      // this
-      if (is_first_imu_msg) {
-        is_first_imu_msg = false;
-        continue;
-      }
-
-      if (kNumImuToSkip < imu_msg_skip) {
-        msg_vio.imu.push_back(msg_imu);
-        imu_pubs_[imu_id].publish(msg_imu);
-        imu_msg_skip = 0;
-      }
-
-      ++imu_msg_skip;
-
-      prev_count = count;
-    }
-  }
-
-  ROS_DEBUG("%lu imu messages", msg_vio.imu.size());
-  ROS_DEBUG("imu id: %d ", imu_id);
-
   cv::Mat images[2];
   extractImages(frame, cam_id.is_raw_images, images);
 
@@ -1112,6 +1075,43 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
         camera_params_.T_cam_imu[cam_id.right_cam_num], frame_time, "imu",
         msg_vio.right_image.header.frame_id));
   }
+
+  static uint8_t prev_count = 0;
+
+  // process the IMU data
+  bool is_first_imu_msg = true;
+
+  static int imu_msg_skip = 0;
+  constexpr int kNumImuToSkip = 18;
+
+  for (size_t i = 0; i < frame->height; ++i) {
+    sensor_msgs::Imu msg_imu;
+
+    const uint8_t count = extractImuCount(i, frame);
+
+    if ((count != prev_count) && extractImuData(i, frame, &msg_imu)) {
+      // the first imu message of a frame sometimes has a bad timestamp, as we
+      // get them at 862 Hz we just throw it out rather then try correct for
+      // this
+      if (is_first_imu_msg) {
+        is_first_imu_msg = false;
+        continue;
+      }
+
+      if (kNumImuToSkip < imu_msg_skip) {
+        msg_vio.imu.push_back(msg_imu);
+        imu_pubs_[imu_id].publish(msg_imu);
+        imu_msg_skip = 0;
+      }
+
+      ++imu_msg_skip;
+
+      prev_count = count;
+    }
+  }
+
+  ROS_DEBUG("%lu imu messages", msg_vio.imu.size());
+  ROS_DEBUG("imu id: %d ", imu_id);
 }
 
 } /* uvc */
