@@ -804,7 +804,7 @@ void uvcROSDriver::extractImages(uvc_frame_t *frame, const bool is_raw_images,
   // read the image data and separate the 2 images
   const cv::Mat input_image(frame->height, frame->width, CV_8UC2, frame->data);
 
-  cv::split(input_image(cv::Rect(16, 0, frame->width - 32, frame->height)),
+  cv::split(input_image(cv::Rect(0, 0, frame->width - 16, frame->height)),
             images);
 
   // if second channel is the disparity, apply filtering

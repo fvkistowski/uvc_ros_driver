@@ -275,7 +275,7 @@ class uvcROSDriver {
     }
 
     if (!raw_enabled_) {
-      camera_config = camera_config & 0xFF0;
+      camera_config = camera_config & 0xFF1;
     }
 
     return camera_config;
