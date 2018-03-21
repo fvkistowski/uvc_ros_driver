@@ -165,8 +165,10 @@ void uvcROSDriver::initDevice() {
   freespace_pointcloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(
       "freespace_pointcloud", kCamQueueSize);
 
-  // watchdog (Sometimes the camera randomly stops giving callbacks when plugged in for the first time)
-  watchdog_timer_ = nh_.createTimer(ros::Duration(0.05), &uvcROSDriver::watchdogCallback, this, true);
+  // watchdog (Sometimes the camera randomly stops giving callbacks when plugged
+  // in for the first time)
+  watchdog_timer_ = nh_.createTimer(
+      ros::Duration(0.05), &uvcROSDriver::watchdogCallback, this, true);
 
   // time translator
   constexpr int kSecondsToMicroSeconds = 1e6;
@@ -220,10 +222,11 @@ void uvcROSDriver::initDevice() {
   }
 }
 
-void uvcROSDriver::watchdogCallback(const ros::TimerEvent&){
-
-  if(uvc_cb_flag_ && !still_alive_){
-    ROS_ERROR("Watchdog triggered, camera stopped outputting images, trying to restart");
+void uvcROSDriver::watchdogCallback(const ros::TimerEvent &) {
+  if (uvc_cb_flag_ && !still_alive_) {
+    ROS_ERROR(
+        "Watchdog triggered, camera stopped outputting images, trying to "
+        "restart");
     uvc_cb_flag_ = false;
 
     uvc_start_streaming(devh_, &ctrl_, &callback, this, 0);
@@ -775,11 +778,10 @@ double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
   double acc_scale_factor = kGravity;
   double gyro_scale_factor = kDeg2Rad;
 
-  if(adis_enabled_){
+  if (adis_enabled_) {
     acc_scale_factor /= 4000.0;
     gyro_scale_factor /= 100.0;
-  }
-  else{
+  } else {
     acc_scale_factor /= 16384.0;
     gyro_scale_factor /= 131.0;
   }
@@ -997,6 +999,27 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
 
   cv::Mat images[2];
   extractImages(frame, cam_id.is_raw_images, images);
+
+  if ((cam_id.left_cam_num == 0) && (cam_id.is_raw_images == false)) {
+    // mother of all hacks
+    cv::ellipse(images[0],
+                cv::RotatedRect(cv::Point(247, 142), cv::Point(501, 142),
+                                cv::Point(501, 3)),
+                0, -1);
+    cv::ellipse(images[1],
+                cv::RotatedRect(cv::Point(247, 142), cv::Point(501, 142),
+                                cv::Point(501, 3)),
+                0, -1);
+
+    cv::ellipse(images[0],
+                cv::RotatedRect(cv::Point(261, 339), cv::Point(465, 339),
+                                cv::Point(465, 460)),
+                0, -1);
+    cv::ellipse(images[1],
+                cv::RotatedRect(cv::Point(261, 339), cv::Point(465, 339),
+                                cv::Point(465, 460)),
+                0, -1);
+  }
 
   cv_bridge::CvImage left;
   left.encoding = sensor_msgs::image_encodings::MONO8;
