@@ -164,9 +164,6 @@ class uvcROSDriver {
   // tf broadcaster
   tf::TransformBroadcaster br_;
 
-  ros::Timer watchdog_timer_;
-  bool still_alive_;
-
   // time translation
   std::unique_ptr<cuckoo_time_translator::UnwrappedDeviceTimeTranslator>
       device_time_translator_;

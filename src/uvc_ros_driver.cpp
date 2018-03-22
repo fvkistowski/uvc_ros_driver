@@ -165,9 +165,6 @@ void uvcROSDriver::initDevice() {
   freespace_pointcloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(
       "freespace_pointcloud", kCamQueueSize);
 
-  // watchdog (Sometimes the camera randomly stops giving callbacks when plugged in for the first time)
-  watchdog_timer_ = nh_.createTimer(ros::Duration(0.05), &uvcROSDriver::watchdogCallback, this, true);
-
   // time translator
   constexpr int kSecondsToMicroSeconds = 1e6;
   constexpr int kTimerBits = 32;
@@ -218,23 +215,6 @@ void uvcROSDriver::initDevice() {
     // set flag for completed initializiation
     device_initialized_ = true;
   }
-}
-
-void uvcROSDriver::watchdogCallback(const ros::TimerEvent&){
-
-  if(uvc_cb_flag_ && !still_alive_){
-    ROS_ERROR("Watchdog triggered, camera stopped outputting images, trying to restart");
-    uvc_cb_flag_ = false;
-
-    uvc_start_streaming(devh_, &ctrl_, &callback, this, 0);
-
-    watchdog_timer_.setPeriod(ros::Duration(kWatchdogRestartTime));
-    watchdog_timer_.start();
-  }
-  still_alive_ = false;
-
-  watchdog_timer_.setPeriod(ros::Duration(kWatchdogTimeout));
-  watchdog_timer_.start();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -700,7 +680,13 @@ bool uvcROSDriver::extractAndTranslateTimestamp(size_t line,
 
   // only update on image timestamps
   if (update_translator) {
-    device_time_translator_->update(fpga_timestamp_64, ros::Time::now());
+    try{
+      device_time_translator_->update(fpga_timestamp_64, ros::Time::now());
+    }
+    catch (const std::exception& e) {
+      ROS_ERROR_STREAM("Caught exception during time update: " << e.what());
+      return false;
+    }
   }
 
   if (device_time_translator_->isReadyToTranslate()) {
@@ -982,8 +968,6 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     std::cout << std::endl;
     ROS_INFO("Stream started");
   }
-  // flag
-  still_alive_ = true;
   uvc_cb_flag_ = true;
 
   ait_ros_messages::VioSensorMsg msg_vio;
