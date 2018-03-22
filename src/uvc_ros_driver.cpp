@@ -319,13 +319,15 @@ void uvcROSDriver::sendCameraParam(
     const float k2, const float r1, const float r2, const Eigen::Matrix3d &H) {
   std::string camera_name = "CAM" + std::to_string(camera_number);
 
-  setParam("PARAM_DM_" + camera_name, static_cast<int>(dtype));
+  setParam("PARAM_DM_" + camera_name, static_cast<float>(dtype));
   setParam("PARAM_CCX_" + camera_name, p0[0]);
   setParam("PARAM_CCY_" + camera_name, p0[1]);
   setParam("PARAM_FCX_" + camera_name, fx);
   setParam("PARAM_FCY_" + camera_name, fy);
   setParam("PARAM_KC1_" + camera_name, k1);
   setParam("PARAM_KC2_" + camera_name, k2);
+  setParam("PARAM_KC3_" + camera_name, r1);
+  setParam("PARAM_KC4_" + camera_name, r2);
   setParam("PARAM_P1_" + camera_name, r1);
   setParam("PARAM_P2_" + camera_name, r2);
   setParam("PARAM_H11_" + camera_name, H(0, 0));
@@ -437,8 +439,14 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
 
         std::pair<int, int> indx = homography_mapping_[i];
 
+        //hack for now do cleaner later
+        double zoom = 0;
+        if(i == 0){
+          zoom = 50;
+        }
+
         StereoHomography h(cams[indx.first], cams[indx.second]);
-        h.getHomography(H0, H1, f_new, p0_new, p1_new);
+        h.getHomography(H0, H1, f_new, p0_new, p1_new, zoom);
 
         f_[indx.first] = f_new;
         f_[indx.second] = f_new;
