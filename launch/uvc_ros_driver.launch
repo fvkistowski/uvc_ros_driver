@@ -13,7 +13,7 @@
        7: 2 front + 2nd and 3rd camra pair -->
   <arg name="cameraConfig" default="1" />
   <!-- calibration file in folder calib -->
-  <arg name="cameraConfigFile" default="/media/camera/calibration.yaml" />
+  <arg name="cameraConfigFile" default="/home/z/Datasets/cal/calibration.yaml" />
 
   <!-- camera node -->
   <node pkg="uvc_ros_driver" name="uvc_camera" type="uvc_ros_driver_node" output="screen">

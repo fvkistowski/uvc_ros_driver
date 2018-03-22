@@ -326,8 +326,8 @@ void uvcROSDriver::sendCameraParam(
   setParam("PARAM_FCY_" + camera_name, fy);
   setParam("PARAM_KC1_" + camera_name, k1);
   setParam("PARAM_KC2_" + camera_name, k2);
-  setParam("PARAM_KC3_" + camera_name, r1);
-  setParam("PARAM_KC4_" + camera_name, r2);
+  setParam("PARAM_P1_" + camera_name, r1);
+  setParam("PARAM_P2_" + camera_name, r2);
   setParam("PARAM_H11_" + camera_name, H(0, 0));
   setParam("PARAM_H12_" + camera_name, H(0, 1));
   setParam("PARAM_H13_" + camera_name, H(0, 2));
