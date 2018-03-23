@@ -891,11 +891,12 @@ void uvcROSDriver::calcPointCloud(
     const cv::Mat &input_disparity, const cv::Mat &left_image,
     const size_t cam_num, pcl::PointCloud<pcl::PointXYZRGB> *pointcloud,
     pcl::PointCloud<pcl::PointXYZRGB> *freespace_pointcloud) const {
-    const double focal_length = 0.5*f_[cam_num];
+    const double focal_length = f_[cam_num];
     const double cx = p_[cam_num].x();
     const double cy = p_[cam_num].y();
 
-  const double baseline = 0.1;
+  const double baseline =
+      -camera_params_.StereoTransformationMatrix[cam_num / 2][0][3];
 
   pointcloud->clear();
   freespace_pointcloud->clear();
@@ -936,7 +937,7 @@ void uvcROSDriver::calcPointCloud(
 
       pcl::PointXYZRGB point;
 
-      point.z = (16 * focal_length * baseline) / disparity_value;
+      point.z = (8 * focal_length * baseline) / disparity_value;
       point.x = point.z * (x_pixels - cx) / focal_length;
       point.y = point.z * (y_pixels - cy) / focal_length;
 
