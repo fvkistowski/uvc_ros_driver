@@ -937,7 +937,7 @@ void uvcROSDriver::calcPointCloud(
 
       pcl::PointXYZRGB point;
 
-      point.z = (8 * focal_length * baseline) / disparity_value;
+      point.z = (10 * focal_length * baseline) / disparity_value;
       point.x = point.z * (x_pixels - cx) / focal_length;
       point.y = point.z * (y_pixels - cy) / focal_length;
 
