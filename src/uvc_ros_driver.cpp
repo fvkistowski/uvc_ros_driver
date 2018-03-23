@@ -680,11 +680,16 @@ bool uvcROSDriver::extractAndTranslateTimestamp(size_t line,
 
   // only update on image timestamps
   if (update_translator) {
+    static uint32_t prev_fpga_timestamp; //only needed for debugging
     try{
       device_time_translator_->update(fpga_timestamp_64, ros::Time::now());
+      prev_fpga_timestamp = fpga_timestamp;
     }
     catch (const std::exception& e) {
       ROS_ERROR_STREAM("Caught exception during time update: " << e.what());
+      ROS_ERROR_STREAM("Current fpga timestamp: " << fpga_timestamp);
+      ROS_ERROR_STREAM("Previous fpga timestamp: " << prev_fpga_timestamp);
+
       return false;
     }
   }
