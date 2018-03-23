@@ -891,7 +891,7 @@ void uvcROSDriver::calcPointCloud(
     const cv::Mat &input_disparity, const cv::Mat &left_image,
     const size_t cam_num, pcl::PointCloud<pcl::PointXYZRGB> *pointcloud,
     pcl::PointCloud<pcl::PointXYZRGB> *freespace_pointcloud) const {
-    const double focal_length = f_[cam_num];
+    const double focal_length = 0.5*f_[cam_num];
     const double cx = p_[cam_num].x();
     const double cy = p_[cam_num].y();
 
