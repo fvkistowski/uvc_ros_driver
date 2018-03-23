@@ -895,8 +895,7 @@ void uvcROSDriver::calcPointCloud(
     const double cx = p_[cam_num].x();
     const double cy = p_[cam_num].y();
 
-  const double baseline =
-      -camera_params_.StereoTransformationMatrix[cam_num / 2][0][3];
+  const double baseline = 0.1;
 
   pointcloud->clear();
   freespace_pointcloud->clear();
