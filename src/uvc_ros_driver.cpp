@@ -419,9 +419,9 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
 
         std::pair<int, int> indx = homography_mapping_[i];
 
-        //hack for now do cleaner later
+        // hack for now do cleaner later
         double zoom = 0;
-        if(i == 0){
+        if (i == 0) {
           zoom = 50;
         }
 
@@ -680,15 +680,24 @@ bool uvcROSDriver::extractAndTranslateTimestamp(size_t line,
 
   // only update on image timestamps
   if (update_translator) {
-    static uint32_t prev_fpga_timestamp; //only needed for debugging
-    try{
+    static uint32_t prev_fpga_timestamp;  // only needed for debugging
+    try {
       device_time_translator_->update(fpga_timestamp_64, ros::Time::now());
       prev_fpga_timestamp = fpga_timestamp;
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception &e) {
       ROS_ERROR_STREAM("Caught exception during time update: " << e.what());
       ROS_ERROR_STREAM("Current fpga timestamp: " << fpga_timestamp);
       ROS_ERROR_STREAM("Previous fpga timestamp: " << prev_fpga_timestamp);
+
+      constexpr int kSecondsToMicroSeconds = 1e6;
+      constexpr int kTimerBits = 32;
+      device_time_translator_.reset(
+          new cuckoo_time_translator::UnwrappedDeviceTimeTranslator(
+              cuckoo_time_translator::WrappingClockParameters(
+                  1L << kTimerBits, kSecondsToMicroSeconds),
+              nh_.getNamespace(),
+              cuckoo_time_translator::Defaults().setFilterAlgorithm(
+                  cuckoo_time_translator::FilterAlgorithm::ConvexHull)));
 
       return false;
     }
@@ -774,11 +783,10 @@ double uvcROSDriver::extractImuElementData(size_t line, ImuElement element,
   double acc_scale_factor = kGravity;
   double gyro_scale_factor = kDeg2Rad;
 
-  if(adis_enabled_){
+  if (adis_enabled_) {
     acc_scale_factor /= 4000.0;
     gyro_scale_factor /= 100.0;
-  }
-  else{
+  } else {
     acc_scale_factor /= 16384.0;
     gyro_scale_factor /= 131.0;
   }
