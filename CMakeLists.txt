@@ -9,7 +9,7 @@ catkin_simple(ALL_DEPS_REQUIRED)
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
-find_package(OpenCV 3 REQUIRED COMPONENTS core calib3d)
+find_package(OpenCV 3 REQUIRED COMPONENTS core calib3d highgui)
 
 find_package(libuvc REQUIRED)
 

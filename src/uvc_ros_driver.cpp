@@ -420,10 +420,7 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
         std::pair<int, int> indx = homography_mapping_[i];
 
         // hack for now do cleaner later
-        double zoom = 0;
-        if (i == 0) {
-          zoom = 50;
-        }
+        double zoom = -100;
 
         StereoHomography h(cams[indx.first], cams[indx.second]);
         h.getHomography(H0, H1, f_new, p0_new, p1_new, zoom);
@@ -589,8 +586,8 @@ void uvcROSDriver::dynamicReconfigureCallback(
 uvc_error_t uvcROSDriver::initAndOpenUvc() {
   uvc_error_t res;
   /* Initialize a UVC service context. Libuvc will set up its own libusb
-  * context. Replace NULL with a libusb_context pointer to run libuvc
-  * from an existing libusb context. */
+   * context. Replace NULL with a libusb_context pointer to run libuvc
+   * from an existing libusb context. */
   res = uvc_init(&ctx_, NULL);
 
   if (res < 0) {
@@ -625,7 +622,7 @@ uvc_error_t uvcROSDriver::initAndOpenUvc() {
       devh_, &ctrl_,              /* result stored in ctrl */
       UVC_FRAME_FORMAT_YUYV,      /* YUV 422, aka YUV 4:2:2. try _COMPRESSED */
       raw_width_, raw_height_, 30 /* width, height, fps */
-      );
+  );
 
   if (res < 0) {
     /* device doesn't provide a matching stream */
@@ -891,9 +888,9 @@ void uvcROSDriver::calcPointCloud(
     const cv::Mat &input_disparity, const cv::Mat &left_image,
     const size_t cam_num, pcl::PointCloud<pcl::PointXYZRGB> *pointcloud,
     pcl::PointCloud<pcl::PointXYZRGB> *freespace_pointcloud) const {
-    const double focal_length = f_[cam_num];
-    const double cx = p_[cam_num].x();
-    const double cy = p_[cam_num].y();
+  const double focal_length = f_[cam_num];
+  const double cx = p_[cam_num].x();
+  const double cy = p_[cam_num].y();
 
   const double baseline = 0.1;
 
@@ -936,7 +933,7 @@ void uvcROSDriver::calcPointCloud(
 
       pcl::PointXYZRGB point;
 
-      point.z = (10 * focal_length * baseline) / disparity_value;
+      point.z = (8 * focal_length * baseline) / disparity_value;
       point.x = point.z * (x_pixels - cx) / focal_length;
       point.y = point.z * (y_pixels - cy) / focal_length;
 
@@ -1003,9 +1000,59 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
   extractImages(frame, cam_id.is_raw_images, images);
 
   cv_bridge::CvImage left;
-  left.encoding = sensor_msgs::image_encodings::MONO8;
-  left.image = images[0];
-  msg_vio.left_image = *left.toImageMsg();
+
+  if (cam_id.is_raw_images) {
+    left.encoding = sensor_msgs::image_encodings::BGR8;
+    cv::Mat color_image;
+    cvtColor(images[0], color_image, cv::COLOR_BayerBG2BGR_VNG);
+
+    std::vector<cv::Mat> color_channels(3);
+    cv::split(color_image, color_channels);
+
+    const int num_sat = 0.25 * width_ * height_;
+
+    cv::Mat white_balanced;
+
+    std::vector<int> hist_size = {256};
+    std::vector<float> ranges = {0, 255};
+    std::vector<int> channels = {0};
+
+    for (size_t i = 0; i < 3; ++i) {
+      cv::Mat hist;
+      //ROS_ERROR_STREAM("s");
+      std::vector<cv::Mat> channel;
+      channel.push_back(color_channels[i]);
+      cv::calcHist(channel, channels, cv::Mat(), hist, hist_size,
+                   ranges, false);
+
+      size_t color_max, color_min;
+
+      int j = 0;
+      for (size_t sum = 0; sum < num_sat; sum += hist.at<float>(j++)){
+        
+      }
+      color_min = j;
+
+      j = 255;
+      for (size_t sum = 0; sum < num_sat; sum += hist.at<float>(j--)){
+        
+      }
+      color_max = j;
+
+      color_channels[i] =
+          (color_channels[i] - color_min) / ((color_max - color_min) / 200.0);
+    }
+
+    cv::merge(color_channels, white_balanced);
+
+    left.image = white_balanced;
+    msg_vio.left_image = *left.toImageMsg();
+  }
+  else {
+    left.encoding = sensor_msgs::image_encodings::MONO8;
+    left.image = images[0];
+    msg_vio.left_image = *left.toImageMsg();
+  }
 
   cv_bridge::CvImage right;
   right.encoding = sensor_msgs::image_encodings::MONO8;
@@ -1116,6 +1163,6 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
 
   ROS_DEBUG("%lu imu messages", msg_vio.imu.size());
   ROS_DEBUG("imu id: %d ", imu_id);
-}
+}  // namespace uvc
 
-} /* uvc */
+}  // namespace uvc
