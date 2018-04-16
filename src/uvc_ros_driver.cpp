@@ -884,6 +884,62 @@ void uvcROSDriver::bulidFilledDisparityImage(const cv::Mat &input_disparity,
   *disparity_filled = cv::max(disparity_filled_left, disparity_filled_right);
 }
 
+void uvcROSDriver::whiteBalance(const cv::Mat &color_image,
+                                cv::Mat *white_balanced, double measure_point) {
+  if (color_image.channels() == 1) {
+    ROS_ERROR_STREAM("White balancing requested on a grayscale image");
+    return;
+  }
+
+  constexpr int kIntenstiyMax = 255;
+  constexpr int kIntenstiyMin = 0;
+  constexpr int kHistSize = kIntenstiyMax - kIntenstiyMin + 1;
+
+  std::vector<cv::Mat> color_channels(color_image.channels());
+  cv::split(color_image, color_channels);
+
+  const int pixels_at_measure_point =
+      measure_point * color_image.cols * color_image.rows;
+
+  std::vector<int> min_intensity, max_intensity;
+  int white_point = kIntenstiyMin;
+  int black_point = kIntenstiyMax;
+
+  for (const cv::Mat &channel : color_channels) {
+    cv::Mat hist;
+    std::vector<cv::Mat> single_color_channel = {channel};
+    cv::calcHist(single_color_channel, {0}, cv::Mat(), hist, {kHistSize},
+                 {kIntenstiyMin, kIntenstiyMax}, false);
+
+    // get intensity i of image for which pixels_at_measure_point pixels < i
+    int j = 0;
+    for (size_t sum = 0; sum < pixels_at_measure_point;
+         sum += hist.at<float>(j++))
+      ;
+    min_intensity.push_back(j);
+
+    // same but for upper
+    j = kHistSize - 1;
+    for (size_t sum = 0; sum < pixels_at_measure_point;
+         sum += hist.at<float>(j--))
+      ;
+    max_intensity.push_back(j);
+
+    white_point = std::max(max_intensity.back(), white_point);
+    black_point = std::min(min_intensity.back(), black_point);
+  }
+
+  // strech color channels so the average of all pixels is grey
+  for (size_t i = 0; i < max_intensity.size(); ++i) {
+    double low = kIntenstiyMin - black_point + min_intensity[i];
+    double high = kIntenstiyMax - white_point + max_intensity[i];
+    double slope = (kIntenstiyMax - kIntenstiyMin) / (high - low);
+    color_channels[i] = slope * color_channels[i] - low;
+  }
+
+  cv::merge(color_channels, *white_balanced);
+}
+
 void uvcROSDriver::calcPointCloud(
     const cv::Mat &input_disparity, const cv::Mat &left_image,
     const size_t cam_num, pcl::PointCloud<pcl::PointXYZRGB> *pointcloud,
@@ -1003,52 +1059,13 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
 
   if (cam_id.is_raw_images) {
     left.encoding = sensor_msgs::image_encodings::BGR8;
-    cv::Mat color_image;
+    cv::Mat color_image, white_balanced;
     cvtColor(images[0], color_image, cv::COLOR_BayerBG2BGR_VNG);
-
-    std::vector<cv::Mat> color_channels(3);
-    cv::split(color_image, color_channels);
-
-    const int num_sat = 0.25 * width_ * height_;
-
-    cv::Mat white_balanced;
-
-    std::vector<int> hist_size = {256};
-    std::vector<float> ranges = {0, 255};
-    std::vector<int> channels = {0};
-
-    for (size_t i = 0; i < 3; ++i) {
-      cv::Mat hist;
-      //ROS_ERROR_STREAM("s");
-      std::vector<cv::Mat> channel;
-      channel.push_back(color_channels[i]);
-      cv::calcHist(channel, channels, cv::Mat(), hist, hist_size,
-                   ranges, false);
-
-      size_t color_max, color_min;
-
-      int j = 0;
-      for (size_t sum = 0; sum < num_sat; sum += hist.at<float>(j++)){
-        
-      }
-      color_min = j;
-
-      j = 255;
-      for (size_t sum = 0; sum < num_sat; sum += hist.at<float>(j--)){
-        
-      }
-      color_max = j;
-
-      color_channels[i] =
-          (color_channels[i] - color_min) / ((color_max - color_min) / 200.0);
-    }
-
-    cv::merge(color_channels, white_balanced);
+    whiteBalance(color_image, &white_balanced);
 
     left.image = white_balanced;
     msg_vio.left_image = *left.toImageMsg();
-  }
-  else {
+  } else {
     left.encoding = sensor_msgs::image_encodings::MONO8;
     left.image = images[0];
     msg_vio.left_image = *left.toImageMsg();

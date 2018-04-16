@@ -186,8 +186,9 @@ class uvcROSDriver {
   static uint8_t extractImuCount(size_t line, uvc_frame_t *frame);
   bool extractImuData(size_t line, uvc_frame_t *frame, sensor_msgs::Imu *msg);
   double extractImuElementData(size_t imu_idx, ImuElement element,
-                                      uvc_frame_t *frame);
-  void extractImages(uvc_frame_t *frame, const bool is_raw_images, cv::Mat *images);
+                               uvc_frame_t *frame);
+  void extractImages(uvc_frame_t *frame, const bool is_raw_images,
+                     cv::Mat *images);
 
   uvc_error_t initAndOpenUvc();
   int setParam(const std::string &name, float val);
@@ -212,12 +213,15 @@ class uvcROSDriver {
                                         cv::Mat *disparity_filled,
                                         cv::Mat *input_valid);
 
+  void whiteBalance(const cv::Mat &color_image, cv::Mat *white_balanced,
+                    double measure_point = 0.25);
+
   void calcPointCloud(
       const cv::Mat &input_disparity, const cv::Mat &left_image,
       const size_t cam_num, pcl::PointCloud<pcl::PointXYZRGB> *pointcloud,
       pcl::PointCloud<pcl::PointXYZRGB> *freespace_pointcloud) const;
 
-  void watchdogCallback(const ros::TimerEvent&);
+  void watchdogCallback(const ros::TimerEvent &);
 
  public:
   uvcROSDriver(ros::NodeHandle nh) : nh_(nh), it_(nh_){};
@@ -301,6 +305,6 @@ class uvcROSDriver {
   };
 };
 
-} /* uvc */
+}  // namespace uvc
 
 #endif /* end of include guard: __UVC_ROS_DRIVER_H__ */
