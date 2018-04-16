@@ -216,7 +216,7 @@ class uvcROSDriver {
                                         cv::Mat *input_valid);
 
   void whiteBalance(const cv::Mat &color_image, cv::Mat *white_balanced,
-                    double measure_point = 0.25);
+                    double measure_point = 0.20);
 
   void calcPointCloud(
       const cv::Mat &input_disparity, const cv::Mat &left_image,

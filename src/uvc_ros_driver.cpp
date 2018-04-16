@@ -1062,7 +1062,7 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
   if (cam_id.is_raw_images && debayer_enabled_) {
     left.encoding = sensor_msgs::image_encodings::BGR8;
     cv::Mat color_image;
-    cvtColor(images[0], color_image, cv::COLOR_BayerBG2BGR_VNG);
+    cvtColor(images[0], color_image, cv::COLOR_BayerBG2BGR);
 
     if (white_balance_enabled_) {
       cv::Mat white_balanced;
@@ -1071,12 +1071,11 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
     } else {
       left.image = color_image;
     }
-    msg_vio.left_image = *left.toImageMsg();
   } else {
     left.encoding = sensor_msgs::image_encodings::MONO8;
     left.image = images[0];
-    msg_vio.left_image = *left.toImageMsg();
   }
+  msg_vio.left_image = *left.toImageMsg();
 
   cv_bridge::CvImage right;
   right.encoding = sensor_msgs::image_encodings::MONO8;
