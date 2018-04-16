@@ -574,6 +574,8 @@ void uvcROSDriver::dynamicReconfigureCallback(
     // update stereo parameters in FPGA
     setParam("SETCALIB", 1.0f);
 
+    debayer_enabled_ = config.DEBAYER;
+    white_balance_enabled_ = config.WHITE_BALANCE;
     gen_pointcloud_ = config.GEN_POINTCLOUD;
     speckle_filter_ = config.SPECKLE_FILTER;
     max_speckle_size_ = config.MAX_SPECKLE_SIZE;
@@ -1057,13 +1059,18 @@ void uvcROSDriver::uvc_cb(uvc_frame_t *frame) {
 
   cv_bridge::CvImage left;
 
-  if (cam_id.is_raw_images) {
+  if (cam_id.is_raw_images && debayer_enabled_) {
     left.encoding = sensor_msgs::image_encodings::BGR8;
-    cv::Mat color_image, white_balanced;
+    cv::Mat color_image;
     cvtColor(images[0], color_image, cv::COLOR_BayerBG2BGR_VNG);
-    whiteBalance(color_image, &white_balanced);
 
-    left.image = white_balanced;
+    if (white_balance_enabled_) {
+      cv::Mat white_balanced;
+      whiteBalance(color_image, &white_balanced);
+      left.image = white_balanced;
+    } else {
+      left.image = color_image;
+    }
     msg_vio.left_image = *left.toImageMsg();
   } else {
     left.encoding = sensor_msgs::image_encodings::MONO8;

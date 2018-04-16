@@ -109,6 +109,8 @@ class uvcROSDriver {
   bool adis_enabled_ = true;
   bool speckle_filter_ = false;
   bool gen_pointcloud_ = false;
+  bool debayer_enabled_ = false;
+  bool white_balance_enabled_ = false; 
 
   int n_cameras_ = 2;
   int raw_width_ = 752 + 16;  // 376+16;//
