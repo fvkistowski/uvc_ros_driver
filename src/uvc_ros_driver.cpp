@@ -703,7 +703,8 @@ bool uvcROSDriver::extractAndTranslateTimestamp(size_t line,
   }
 
   if (device_time_translator_->isReadyToTranslate()) {
-    *stamp = device_time_translator_->translate(fpga_timestamp);
+    *stamp = device_time_translator_->translate(
+        device_time_translator_->unwrapEventStamp(fpga_timestamp).getValue());
   } else {
     return false;
   }
