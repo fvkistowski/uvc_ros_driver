@@ -486,6 +486,7 @@ void uvcROSDriver::dynamicReconfigureCallback(
     setParam("ADIS_IMU", static_cast<float>(config.ADIS_IMU));
 
     raw_enabled_ = config.RAW_ENABLED;
+    rect_enabled_ = config.RECT_ENABLED;
     setParam("CAMERA_ENABLE", static_cast<float>(buildCameraConfig()));
 
     setParam("IM_H_FLIP_CAM0", static_cast<float>(config.CAMERA_0_HFLIP));
@@ -561,6 +562,7 @@ void uvcROSDriver::dynamicReconfigureCallback(
     setParam("SETCALIB", 1.0f);
 
     raw_enabled_ = config.RAW_ENABLED;
+    rect_enabled_ = config.RECT_ENABLED;
     setParam("CAMERA_ENABLE", static_cast<float>(buildCameraConfig()));
 
     setParam("STEREO_RE_CAM1", static_cast<float>(config.STEREO_RE_CAM1));

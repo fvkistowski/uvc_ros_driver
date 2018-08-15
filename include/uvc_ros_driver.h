@@ -97,7 +97,8 @@ class uvcROSDriver {
 
   bool device_initialized_ = false;
   bool primary_camera_mode_ = false;
-  bool raw_enabled_ = false;
+  bool raw_enabled_ = true;
+  bool rect_enabled_ = false;
   bool depth_map_ = false;
   bool set_calibration_ = false;
   bool uvc_cb_flag_ = false;
@@ -243,6 +244,8 @@ class uvcROSDriver {
   };
   bool getRawEnabledMode() { return raw_enabled_; }
   void setRawEnabledMode(bool raw_enabled) { raw_enabled_ = raw_enabled; }
+  bool getRectEnabledMode() { return rect_enabled_; }
+  void setRectEnabledMode(bool rect_enabled) { rect_enabled_ = rect_enabled; }
   bool getUseOfDepthMap() { return depth_map_; }
   void setUseOfDepthMap(bool depth_map) { depth_map_ = depth_map; }
   bool getCalibrationParam() { return set_calibration_; }
@@ -273,7 +276,10 @@ class uvcROSDriver {
     }
 
     if (!raw_enabled_) {
-      camera_config = camera_config & 0xFF1;
+      camera_config = camera_config & 0xFE1;
+    }
+    if (!rect_enabled_) {
+      camera_config = camera_config & 0x01F;
     }
 
     return camera_config;
