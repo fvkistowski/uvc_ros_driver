@@ -55,8 +55,6 @@
 #include "libuvc/libuvc.h"
 #include "uvc_ros_driver/UvcDriverConfig.h"
 
-#include <ait_ros_messages/VioSensorMsg.h>
-
 #include <cuckoo_time_translator/DeviceTimeTranslator.h>
 
 #include <cv_bridge/cv_bridge.h>
@@ -98,7 +96,6 @@ class uvcROSDriver {
   static constexpr double kWatchdogRestartTime = 1.0;
 
   bool device_initialized_ = false;
-  bool enable_ait_vio_msg_ = false;
   bool primary_camera_mode_ = false;
   bool raw_enabled_ = false;
   bool depth_map_ = false;
@@ -240,8 +237,6 @@ class uvcROSDriver {
    */
   void startDevice();
   // getter and setter for different internal variables
-  bool getUseOfAITMsgs() { return enable_ait_vio_msg_; }
-  void setUseOFAITMsgs(bool enable) { enable_ait_vio_msg_ = enable; }
   bool getPrimaryCamMode() { return primary_camera_mode_; }
   void setPrimaryCamMode(bool primary_camera_mode) {
     primary_camera_mode_ = primary_camera_mode;

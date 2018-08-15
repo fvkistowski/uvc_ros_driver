@@ -17,7 +17,6 @@
   <depend>rospy</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
-  <depend>ait_ros_messages</depend>
   <depend>roslib</depend>
   <depend>image_transport</depend>
   <depend>cv_bridge</depend>
