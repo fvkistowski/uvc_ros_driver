@@ -22,7 +22,6 @@
   <depend>cv_bridge</depend>
   <depend>pcl_ros</depend>
   <depend>dynamic_reconfigure</depend>
-  <depend>yaml_cpp_catkin</depend>
   <depend>cuckoo_time_translator</depend>
 
 </package>

@@ -13,6 +13,18 @@ find_package(OpenCV 3 REQUIRED COMPONENTS core calib3d highgui)
 
 find_package(libuvc REQUIRED)
 
+# Link against system catkin yaml-cpp if installed.
+find_package(PkgConfig)
+find_package(yaml_cpp_catkin QUIET)
+if(${yaml_cpp_catkin_FOUND})
+    message(STATUS "Found yaml_cpp_catkin, using instead of system library.")
+    set(YamlCpp_LIBRARIES ${yaml_cpp_catkin_LIBRARIES})
+    set(YamlCpp_INCLUDE_DIRS ${yaml_cpp_catkin_INCLUDE_DIRS})
+else()
+    message(STATUS "No yaml_cpp_catkin, using yaml-cpp system library instead.")
+    pkg_check_modules(YamlCpp REQUIRED yaml-cpp>=0.5)
+endif()
+
 ###########
 ## Build ##
 ###########
@@ -30,6 +42,9 @@ cs_add_library(uvc_ros_driver
   src/serial_port.cpp
   src/stereo_homography.cpp
   src/fpga_calibration.cpp
+)
+target_link_libraries(uvc_ros_driver
+  ${YamlCpp_LIBRARIES}
 )
 
 cs_add_executable(uvc_ros_driver_node
