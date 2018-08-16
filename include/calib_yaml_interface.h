@@ -3,118 +3,128 @@
 
 #include <yaml-cpp/yaml.h>
 #include <string>
-#include <sstream>
+
+#include <tf/transform_broadcaster.h>
+
 #include "logging.h"
 
 // cameraParameters
 // =========================================================
-struct CameraParameters { // parameters of one camera
-	bool isValid;
-	double FocalLength[10][2];
-	double PrincipalPoint[10][2];
-	double DistortionCoeffs[10][4];
-	int CameraModel[10];
-	int DistortionModel[10];
+struct CameraParameters {  // parameters of one camera
+  bool isValid;
+  double FocalLength[10][2];
+  double PrincipalPoint[10][2];
+  double DistortionCoeffs[10][4];
+  int CameraModel[10];
+  int DistortionModel[10];
 
-	double StereoTransformationMatrix[5][4][4];
+  double StereoTransformationMatrix[5][4][4];
 
-	enum {PINHOLE = 0, OMNI = 1};
-	enum {RADTAN = 0, EQUI = 1};
+  tf::Transform T_cam_imu[10];
+
+  enum { PINHOLE = 0, OMNI = 1 };
+  enum { RADTAN = 0, EQUI = 1 };
 };
 
+inline CameraParameters parseYaml(const YAML::Node &node) {
+  CameraParameters v;
+  v.isValid = true;
 
-inline CameraParameters parseYaml(const YAML::Node &node)
-{
-	CameraParameters v;
-	v.isValid = true;
+  std::string pinhole = "pinhole";
+  std::string omni = "omni";
 
-	std::string pinhole = "pinhole";
-	std::string omni = "omni";
+  std::string radtan = "radtan";
+  std::string equi = "equidistant";
 
-	std::string radtan = "radtan";
-	std::string equi = "equi";
+  //-------------------------camera models----------------------------
+  for (int h = 0; h < int(node.size()); h++) {
+    YAML::Node camera_model = node["cam" + std::to_string(h)]["camera_model"];
 
-	std::ostringstream cam_name;
+    if (!omni.compare(camera_model.as<std::string>())) {
+      v.CameraModel[h] = v.OMNI;
 
-	//-------------------------camera models----------------------------
-	for (int h = 0; h < int(node.size()); h++) {
-		cam_name.str("");
-		cam_name.clear();
-		cam_name << "cam" << h;
-		YAML::Node CameraModel = node[cam_name.str()]["camera_model"];
+    } else {
+      v.CameraModel[h] = v.PINHOLE;
+    }
+  }
 
-		if (!omni.compare(CameraModel.as<std::string>())) {
-			v.CameraModel[h] = v.OMNI;
+  //-------------------------camera transformation matrix---------------------
+  for (int h = 0; h < int(node.size()/2); h++) {
+    YAML::Node cam_tform_mat = node["cam" + std::to_string(2*h+1)]["T_cn_cnm1"];
 
-		} else {
-			v.CameraModel[h] = v.PINHOLE;
-		}
-	}
+    for (std::size_t i = 0; i < cam_tform_mat.size(); i++) {
+      for (std::size_t j = 0; j < cam_tform_mat[i].size(); j++) {
+        v.StereoTransformationMatrix[h][i][j] =
+            cam_tform_mat[i][j].as<double>();
+      }
+    }
+  }
 
-	//-------------------------camera transformation matrix----------------------------
-	for (int h = 0; h < int(node.size()) / 2; h++) {
-		cam_name.str("");
-		cam_name.clear();
-		cam_name << "cam" << h * 2 + 1;
-		YAML::Node CameraTransformationMatrix = node[cam_name.str()]["T_cn_cnm1"];
+  //-------------------------distortion models----------------------------
+  for (int h = 0; h < int(node.size()); h++) {
+    YAML::Node distortion_model =
+        node["cam" + std::to_string(h)]["distortion_model"];
 
-		for (std::size_t i = 0; i < CameraTransformationMatrix.size(); i++) {
-			for (std::size_t j = 0; j < CameraTransformationMatrix[i].size(); j++) {
-				v.StereoTransformationMatrix[h][i][j] = CameraTransformationMatrix[i][j].as<double>();
-			}
-		}
-	}
+    if (!equi.compare(distortion_model.as<std::string>())) {
+      v.DistortionModel[h] = v.EQUI;
 
-	//-------------------------distortion models----------------------------
-	for (int h = 0; h < int(node.size()); h++) {
-		cam_name.str("");
-		cam_name.clear();
-		cam_name << "cam" << h;
-		YAML::Node DistortionModel = node[cam_name.str()]["distortion_model"];
+    } else {
+      v.DistortionModel[h] = v.RADTAN;
+    }
+  }
 
-		if (!equi.compare(DistortionModel.as<std::string>())) {
-			v.DistortionModel[h] = v.EQUI;
+  //-------------------------distortion coeffs----------------------------
+  for (int h = 0; h < int(node.size()); h++) {
+    YAML::Node distortion_coeffs =
+        node["cam" + std::to_string(h)]["distortion_coeffs"];
 
-		} else {
-			v.DistortionModel[h] = v.RADTAN;
-		}
-	}
+    for (std::size_t i = 0; i < distortion_coeffs.size(); i++) {
+      v.DistortionCoeffs[h][i] = distortion_coeffs[i].as<double>();
+    }
+  }
 
-	//-------------------------distortion coeffs----------------------------
-	for (int h = 0; h < int(node.size()); h++) {
-		cam_name.str("");
-		cam_name.clear();
-		cam_name << "cam" << h;
-		YAML::Node RadialDistortion = node[cam_name.str()]["distortion_coeffs"];
+  //-------------------------focal lengths and principal points-----------
+  for (int h = 0; h < int(node.size()); h++) {
+    YAML::Node intrinsics = node["cam" + std::to_string(h)]["intrinsics"];
 
-		for (std::size_t i = 0; i < RadialDistortion.size(); i++) {
-			v.DistortionCoeffs[h][i] = RadialDistortion[i].as<double>();
-		}
-	}
+    if (v.CameraModel[h] == v.OMNI) {
+      v.FocalLength[h][0] = intrinsics[1].as<double>();
+      v.FocalLength[h][1] = intrinsics[2].as<double>();
+      v.PrincipalPoint[h][0] = intrinsics[3].as<double>();
+      v.PrincipalPoint[h][1] = intrinsics[4].as<double>();
 
-	//-------------------------focal lengths and principal points-----------
-	for (int h = 0; h < int(node.size()); h++) {
-		cam_name.str("");
-		cam_name.clear();
-		cam_name << "cam" << h;
-		YAML::Node intrinsics = node[cam_name.str()]["intrinsics"];
+    } else {
+      v.FocalLength[h][0] = intrinsics[0].as<double>();
+      v.FocalLength[h][1] = intrinsics[1].as<double>();
+      v.PrincipalPoint[h][0] = intrinsics[2].as<double>();
+      v.PrincipalPoint[h][1] = intrinsics[3].as<double>();
+    }
+  }
 
-		if (v.CameraModel[h] == v.OMNI) {
-			v.FocalLength[h][0] = intrinsics[1].as<double>();
-			v.FocalLength[h][1] = intrinsics[2].as<double>();
-			v.PrincipalPoint[h][0] = intrinsics[3].as<double>();
-			v.PrincipalPoint[h][1] = intrinsics[4].as<double>();
+  //-------------------------imu transform----------------------------
+  for (int h = 0; h < int(node.size()); h++) {
+    tf::Matrix3x3 rot_mat;
+    tf::Vector3 t_vec;
 
-		} else {
-			v.FocalLength[h][0] = intrinsics[0].as<double>();
-			v.FocalLength[h][1] = intrinsics[1].as<double>();
-			v.PrincipalPoint[h][0] = intrinsics[2].as<double>();
-			v.PrincipalPoint[h][1] = intrinsics[3].as<double>();
-		}
-	}
+    if (node["cam" + std::to_string(h)]["T_cam_imu"]) {
+      YAML::Node T_raw = node["cam" + std::to_string(h)]["T_cam_imu"];
 
+      for (size_t col = 0; col < 3; ++col) {
+        for (size_t row = 0; row < 3; ++row) {
+          rot_mat[row][col] = T_raw[col][row].as<double>();
+        }
+        t_vec[col] = T_raw[col][3].as<double>();
+      }
 
-	return v;
+    } else {
+      WARN("cam%d-imu transformation not provided in calibration file. Set transformation to identity for now.", h);
+      rot_mat.setIdentity();
+      t_vec.setZero();
+    }
+    v.T_cam_imu[h] = tf::Transform(rot_mat, t_vec);
+  }
+
+  return v;
 }
 
 #endif

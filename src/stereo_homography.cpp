@@ -83,7 +83,7 @@ StereoHomography::StereoHomography(
 	const uvc_ros_driver::FPGACalibration &calib_cam1)
 	: image_width_(752), image_height_(480)
 {
-	if (calib_cam0.projection_model_.type_ ==
+	if (calib_cam0.projection_model_.projection_type_ ==
 	    uvc_ros_driver::ProjectionModelTypes::PINHOLE) {
 		const uvc_ros_driver::CameraProjectionModel *cam0_projection_model =
 			calib_cam0.getProjectionModel();
@@ -125,7 +125,7 @@ StereoHomography::StereoHomography(
 // Computes homography for stereo rectification
 void StereoHomography::getHomography(Eigen::Matrix3d &H0, Eigen::Matrix3d &H1,
 				     double &f_new, Eigen::Vector2d &p0_new,
-				     Eigen::Vector2d &p1_new)
+				     Eigen::Vector2d &p1_new, double zoom)
 {
 
 	Eigen::Map<Eigen::Matrix3d> R0(r0_);
@@ -156,11 +156,8 @@ void StereoHomography::getHomography(Eigen::Matrix3d &H0, Eigen::Matrix3d &H1,
 
 	Eigen::Matrix3d r_1(Eigen::AngleAxisd(om.norm() / (-2.0), om.normalized()));
 
-	double zoom = 30.0;
-
 	if (om.norm() == 0) {
 		r_1.setIdentity();
-		zoom = 0.0;
 	}
 
 	Eigen::Matrix3d r_0 = r_1.transpose();
@@ -200,85 +197,18 @@ void StereoHomography::getHomography(Eigen::Matrix3d &H0, Eigen::Matrix3d &H1,
 	Eigen::Matrix3d R_new;
 	R_new.setIdentity();
 
-	// Computation of the *new* intrinsic parameters for both left and right
-	// cameras
-	// Vertical focal length *MUST* be the same for both images (here, we are
-	// trying to find a focal length
-	// that retains as much information contained in the original distorted
-	// images):
-	double f0_y_new;
-
-	if (d0_[0] < 0)
-		f0_y_new =
-			f0_[1] * (1 + d0_[0] * (pow(image_width_, 2) + pow(image_height_, 2)) /
-				  (4 * pow(f0_[1], 2)));
-	else {
-		f0_y_new = f0_[1];
-	}
-
-	double f1_y_new;
-
-	if (d1_[0] < 0)
-		f1_y_new =
-			f1_[1] * (1 + d1_[0] * (pow(image_width_, 2) + pow(image_height_, 2)) /
-				  (4 * pow(f1_[1], 2)));
-	else {
-		f1_y_new = f1_[1];
-	}
-
-	double f_y_new = std::min(f0_y_new, f1_y_new) +
-			 zoom;  // HACK(gohlp): 40 to zoom in, should be automatically
-
 	// For simplicity, let's pick the same value for the horizontal focal length
 	// as the vertical focal length
 	// (resulting into square pixels)
-	double f0_new = std::round(f_y_new);
-	double f1_new = std::round(f_y_new);
-
-	p0_new = Eigen::Vector2d::Zero();
-
-	// Select the new principal points to maximize the visible area in the
-	// rectified images
-	// To this end, project all corner pixels into rectified image to determine
-	// new corners
-	Eigen::Vector2d corner_coord = Eigen::Vector2d::Zero();
-
-	p0_new +=
-		projectPoint2(normalizePixel(corner_coord, f0_, p0_, d0_), R_0, f0_new);
-	corner_coord << (image_width_ - 1), 0;
-	p0_new +=
-		projectPoint2(normalizePixel(corner_coord, f0_, p0_, d0_), R_0, f0_new);
-	corner_coord << (image_width_ - 1), (image_height_ - 1);
-	p0_new +=
-		projectPoint2(normalizePixel(corner_coord, f0_, p0_, d0_), R_0, f0_new);
-	corner_coord << 0, (image_height_ - 1);
-	p0_new +=
-		projectPoint2(normalizePixel(corner_coord, f0_, p0_, d0_), R_0, f0_new);
-	Eigen::Vector2d center;
-	center << (image_width_ - 1) / 2.0, (image_height_ - 1) / 2.0;
-	p0_new = center - p0_new / 4.0;
-
-	p1_new = Eigen::Vector2d::Zero();
-	corner_coord << 0, 0;
-	p1_new +=
-		projectPoint2(normalizePixel(corner_coord, f1_, p1_, d1_), R_1, f1_new);
-	corner_coord << (image_width_ - 1), 0;
-	p1_new +=
-		projectPoint2(normalizePixel(corner_coord, f1_, p1_, d1_), R_1, f1_new);
-	corner_coord << (image_width_ - 1), (image_height_ - 1);
-	p1_new +=
-		projectPoint2(normalizePixel(corner_coord, f1_, p1_, d1_), R_1, f1_new);
-	corner_coord << 0, (image_height_ - 1);
-	p1_new +=
-		projectPoint2(normalizePixel(corner_coord, f1_, p1_, d1_), R_1, f1_new);
-	p1_new = center - p1_new / 4.0;
+	double f0_new = std::round(f0_[0] + zoom);
+	double f1_new = std::round(f0_[0] + zoom);
 
 	// For simplicity, set the principal points for both cameras to be the average
 	// of the two principal points
-	double py_new = (p0_new(1) + p1_new(1)) / 2.0;
+	double py_new = (p0_[1] + p1_[1]) / 2.0;
 	p0_new(1) = py_new;
 	p1_new(1) = py_new;
-	double px_new = (p0_new(0) + p1_new(0)) / 2.0;
+	double px_new = (p0_[0] + p1_[0]) / 2.0;
 	p0_new(0) = px_new;
 	p1_new(0) = px_new;
 

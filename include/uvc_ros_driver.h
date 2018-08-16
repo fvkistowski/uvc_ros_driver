@@ -43,295 +43,271 @@
 #ifndef __UVC_ROS_DRIVER_H__
 #define __UVC_ROS_DRIVER_H__
 
-#if defined __ARM_NEON__
-#include <arm_neon.h>
-#endif
+#include <valarray>
 
 // local include
-#include "serial_port.h"
-#include "stereo_homography.h"
-#include "fpga_calibration.h"
 #include "calib_yaml_interface.h"
 #include "camera_info_helper.h"
+#include "fpga_calibration.h"
+#include "serial_port.h"
+#include "stereo_homography.h"
 
 #include "libuvc/libuvc.h"
+#include "uvc_ros_driver/UvcDriverConfig.h"
 
-#include <ait_ros_messages/VioSensorMsg.h>
+#include <cuckoo_time_translator/DeviceTimeTranslator.h>
 
-#include <ros/ros.h>
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/calib3d/calib3d.hpp>
+
+#include <dynamic_reconfigure/server.h>
 #include <ros/package.h>
-#include <std_msgs/String.h>
-#include <sensor_msgs/Image.h>
+#include <ros/ros.h>
 #include <sensor_msgs/CameraInfo.h>
+#include <sensor_msgs/Image.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/fill_image.h>
+#include <std_msgs/String.h>
 
-#include <vector>
-#include <utility>  // std::pair
-#include <string>
+#include <image_transport/image_transport.h>
+#include <tf/transform_broadcaster.h>
+
+#include <pcl_conversions/pcl_conversions.h>
+#include <sensor_msgs/PointCloud2.h>
+
 #include <algorithm>
+#include <string>
+#include <utility>  // std::pair
+#include <vector>
 
-namespace uvc
-{
-class uvcROSDriver
-{
-private:
-	bool device_initialized_ = false;
-	bool enable_ait_vio_msg_ = false;
-	bool flip_ = false;
-	bool depth_map_ = false;
-	bool set_calibration_ = false;
-	bool uvc_cb_flag_ = false;
-	bool first_imu_received_flag_ = false;
-	bool serial_port_open_ = false;
+namespace uvc {
 
-	int n_cameras_ = 2;
-	int camera_config_ = 1;
-	int raw_width_ = 752+16;//376+16;//
-	int raw_height_ = 480;//240;//
-	int width_ = raw_width_ - 16;
-	int height_ = raw_height_;
-	int frameCounter_ = 0;
-	int modulo_ = 1;
-	int calibration_mode_ = 0;
-
-	ros::Duration imu_dt_ = ros::Duration(0.0);
-  ros::Time timestamp_prev_imu_msg_;
-
-	// TODO: add other camera parameters
-	// float ....
-
-	const double acc_scale_factor = 16384.0;
-	const double gyr_scale_factor = 131.0;
-	const double deg2rad = 2 * M_PI / 360.0;
-	const double k_ms_to_sec = 1000000.0;
-
-	// homography variables
-	std::vector<std::pair<int, int>> homography_mapping_;
-	std::vector<double> f_;
-	std::vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d>>
-	  p_;
-	std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>>
-	  H_;
-
-	CameraParameters camera_params_;
-	// serial port
-	Serial_Port sp_;
-	// uvc
-	uvc_context_t *ctx_;
-	uvc_device_t *dev_;
-	uvc_device_handle_t *devh_;
-	uvc_stream_ctrl_t ctrl_;
-	// ros node handle
-	ros::NodeHandle nh_;
-	// node name
-	std::string node_name_;
-	// time
-	ros::Time past_;
-	ros::Time frame_time_;
-
-	uint32_t time_wrapper_check_frame_ = 0;
-	uint32_t time_wrapper_check_line_ = 0;
-	// image publishers
-	ros::Publisher cam_0_pub_;
-	ros::Publisher cam_0_info_pub_;
-	ros::Publisher cam_0c_pub_;
-	ros::Publisher cam_0c_info_pub_;
-	ros::Publisher cam_0d_pub_;
-	ros::Publisher cam_0d_info_pub_;
-	ros::Publisher cam_1_pub_;
-	ros::Publisher cam_1_info_pub_;
-	ros::Publisher cam_2_pub_;
-	ros::Publisher cam_2_info_pub_;
-	ros::Publisher cam_2c_pub_;
-	ros::Publisher cam_2c_info_pub_;
-	ros::Publisher cam_2d_pub_;
-	ros::Publisher cam_2d_info_pub_;
-	ros::Publisher cam_3_pub_;
-	ros::Publisher cam_3_info_pub_;
-	ros::Publisher cam_4_pub_;
-	ros::Publisher cam_4_info_pub_;
-	ros::Publisher cam_4c_pub_;
-	ros::Publisher cam_4c_info_pub_;
-	ros::Publisher cam_4d_pub_;
-	ros::Publisher cam_4d_info_pub_;
-	ros::Publisher cam_5_pub_;
-	ros::Publisher cam_5_info_pub_;
-	ros::Publisher cam_6_pub_;
-	ros::Publisher cam_6_info_pub_;
-	ros::Publisher cam_6c_pub_;
-	ros::Publisher cam_6c_info_pub_;
-	ros::Publisher cam_6d_pub_;
-	ros::Publisher cam_6d_info_pub_;
-	ros::Publisher cam_7_pub_;
-	ros::Publisher cam_7_info_pub_;
-	ros::Publisher cam_8_pub_;
-	ros::Publisher cam_8_info_pub_;
-	ros::Publisher cam_8c_pub_;
-	ros::Publisher cam_8c_info_pub_;
-	ros::Publisher cam_8d_pub_;
-	ros::Publisher cam_8d_info_pub_;
-	ros::Publisher cam_9_pub_;
-	ros::Publisher cam_9_info_pub_;
-	// imu publishers
-	ros::Publisher imu0_publisher_;
-	ros::Publisher imu1_publisher_;
-	ros::Publisher imu2_publisher_;
-	ros::Publisher imu3_publisher_;
-	ros::Publisher imu4_publisher_;
-	ros::Publisher imu5_publisher_;
-	ros::Publisher imu6_publisher_;
-	ros::Publisher imu7_publisher_;
-	ros::Publisher imu8_publisher_;
-	ros::Publisher imu9_publisher_;
-	// camera info
-	sensor_msgs::CameraInfo info_cam_0_;
-	sensor_msgs::CameraInfo info_cam_1_;
-	sensor_msgs::CameraInfo info_cam_2_;
-	sensor_msgs::CameraInfo info_cam_3_;
-	sensor_msgs::CameraInfo info_cam_4_;
-	sensor_msgs::CameraInfo info_cam_5_;
-	sensor_msgs::CameraInfo info_cam_6_;
-	sensor_msgs::CameraInfo info_cam_7_;
-	sensor_msgs::CameraInfo info_cam_8_;
-	sensor_msgs::CameraInfo info_cam_9_;
-
-	int16_t ShortSwap(int16_t s);
-	uvc_error_t initAndOpenUvc();
-	int setParam(const std::string &name, float val);
-	void sendCameraParam(const int camera_number, const double fx,
-			     const double fy, const Eigen::Vector2d &p0,
-			     const float k1, const float k2, const float r1,
-			     const float r2, const Eigen::Matrix3d &H);
-	void setCalibration(CameraParameters camParams);
-	inline void deinterleave(const uint8_t *mixed, uint8_t *array1,
-				 uint8_t *array2, size_t mixedLength,
-				 size_t imageWidth, size_t imageHeight);
-	inline void selectCameraInfo(int camera, sensor_msgs::CameraInfo **ci);
-
-public:
-	uvcROSDriver(ros::NodeHandle nh)
-		: nh_(nh), node_name_(ros::this_node::getName()) {};
-	~uvcROSDriver();
-	void uvc_cb(uvc_frame_t *frame);
-	/**
-	 * initialize device, set up topic publishers and compute homography for
-	 * the
-	 * cameras
-	 */
-	void initDevice();
-	/**
-	 * setup uvc stream
-	 */
-	void startDevice();
-	// getter and setter for different internal variables
-	bool getUseOfAITMsgs()
-	{
-		return enable_ait_vio_msg_;
-	};
-	void setUseOFAITMsgs(bool enable)
-	{
-		enable_ait_vio_msg_ = enable;
-	};
-	bool getFlip()
-	{
-		return flip_;
-	};
-	void setFlip(bool flip)
-	{
-		flip_ = flip;
-	};
-	bool getUseOfDepthMap()
-	{
-		return depth_map_;
-	};
-	void setUseOfDepthMap(bool depth_map)
-	{
-		depth_map_ = depth_map;
-	};
-	bool getCalibrationParam()
-	{
-		return set_calibration_;
-	};
-	void setCalibrationParam(bool calibration)
-	{
-		set_calibration_ = calibration;
-	};
-	int getNumberOfCameras()
-	{
-		return n_cameras_;
-	};
-	void setNumberOfCameras(int n_cameras)
-	{
-		n_cameras_ = n_cameras;
-
-		switch (n_cameras) {
-		case 10:
-			//camera_config_ = 0x01F;
-			camera_config_ = 0x3FF;
-			break;
-		case 8:
-			//camera_config_ = 0x00F;
-			camera_config_ = 0x1EF;
-			break;
-
-		case 6:
-			camera_config_ = 0xE7;
-			break;
-
-		case 4:
-
-
-			camera_config_ = 0x63;
-			break;
-
-		case 2:
-		default:
-			camera_config_ = 0x21;
-			break;
-		}
-	};
-	int getCameraConfig()
-	{
-		return camera_config_;
-	};
-	//	void setCameraConfig(int camera_config)
-	//	{
-	//		camera_config_ = camera_config;
-	//	};
-	CameraParameters getCameraParams()
-	{
-		return camera_params_;
-	};
-	void setCameraParams(const CameraParameters &camera_params)
-	{
-		camera_params_ = camera_params;
-	};
-	void getHomographyMapping(
-		std::vector<std::pair<int, int>> &homography_mapping)
-	{
-		homography_mapping = homography_mapping_;
-	};
-	void setHomographyMapping(
-		const std::vector<std::pair<int, int>> &homography_mapping)
-	{
-		homography_mapping_ = homography_mapping;
-	};
-	int getCalibrationMode()
-	{
-		return calibration_mode_;
-	};
-	void setCalibrationMode(int calibration_mode)
-	{
-		calibration_mode_ = calibration_mode;
-
-		// update modulo_ variable also
-		if (calibration_mode != 0) {
-			modulo_ = 12;
-		}
-	};
+struct CamID {
+  size_t left_cam_num;
+  size_t right_cam_num;
+  bool is_raw_images;
 };
 
-} /* uvc */
+class uvcROSDriver {
+ private:
+  enum ImuElement { COUNT, TEMP, AX, AY, AZ, RX, RY, RZ };
+
+  static constexpr double kWatchdogTimeout = 0.05;
+  static constexpr double kWatchdogRestartTime = 1.0;
+
+  bool device_initialized_ = false;
+  bool primary_camera_mode_ = false;
+  bool raw_enabled_ = true;
+  bool rect_enabled_ = false;
+  bool depth_map_ = false;
+  bool set_calibration_ = false;
+  bool uvc_cb_flag_ = false;
+  bool first_imu_received_flag_ = false;
+  bool serial_port_open_ = false;
+  bool adis_enabled_ = true;
+  bool speckle_filter_ = false;
+  bool gen_pointcloud_ = false;
+  bool debayer_enabled_ = false;
+  bool white_balance_enabled_ = false; 
+
+  int n_cameras_ = 2;
+  int raw_width_ = 752 + 16;  // 376+16;//
+  int raw_height_ = 480;      // 240;//
+  int width_ = raw_width_ - 16;
+  int height_ = raw_height_;
+  int frame_counter_ = 0;
+  int modulo_ = 1;
+  int calibration_mode_ = 0;
+  bool shutdown_ = 0;
+
+  // homography variables
+  std::vector<std::pair<int, int>> homography_mapping_;
+  std::vector<double> f_;
+  std::vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d>> p_;
+  std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> H_;
+
+  // Dynamic reconfigure.
+  dynamic_reconfigure::Server<uvc_ros_driver::UvcDriverConfig>
+      dynamic_reconfigure_;
+
+  // disparity filtering
+  int max_speckle_size_;
+  int max_speckle_diff_;
+
+  CameraParameters camera_params_;
+  // serial port
+  Serial_Port sp_;
+  // uvc
+  uvc_context_t *ctx_;
+  uvc_device_t *dev_;
+  uvc_device_handle_t *devh_;
+  uvc_stream_ctrl_t ctrl_;
+
+  // ros node handle
+  ros::NodeHandle nh_;
+  image_transport::ImageTransport it_;
+
+  // image publishers
+  std::vector<image_transport::Publisher> cam_raw_pubs_;
+  std::vector<image_transport::Publisher> cam_rect_pubs_;
+  std::vector<image_transport::Publisher> cam_disp_pubs_;
+  std::vector<ros::Publisher> cam_info_pubs_;
+
+  std::vector<sensor_msgs::CameraInfo> info_cams_;
+
+  std::vector<ros::Publisher> imu_pubs_;
+
+  // pointcloud publishers
+  ros::Publisher pointcloud_pub_;
+  ros::Publisher freespace_pointcloud_pub_;
+
+  // tf broadcaster
+  tf::TransformBroadcaster br_;
+
+  // time translation
+  std::unique_ptr<cuckoo_time_translator::UnwrappedDeviceTimeTranslator>
+      device_time_translator_;
+
+  // low level byte helper functions
+  static uint8_t *rawDataPtr(const uvc_frame_t *frame, const size_t line,
+                             const size_t offset);
+  static uint8_t readUInt8(const uvc_frame_t *frame, const size_t line,
+                           const size_t offset);
+  static int16_t readInt16(const uvc_frame_t *frame, const size_t line,
+                           const size_t offset);
+  static uint32_t readUInt32(const uvc_frame_t *frame, const size_t line,
+                             const size_t offset);
+
+  // extract data from frames
+  bool extractAndTranslateTimestamp(size_t line, bool update_translator,
+                                    uvc_frame_t *frame, ros::Time *stamp);
+  static CamID extractCamId(uvc_frame_t *frame);
+  uint8_t extractImuId(uvc_frame_t *frame);
+  static uint8_t extractImuCount(size_t line, uvc_frame_t *frame);
+  bool extractImuData(size_t line, uvc_frame_t *frame, sensor_msgs::Imu *msg);
+  double extractImuElementData(size_t imu_idx, ImuElement element,
+                               uvc_frame_t *frame);
+  void extractImages(uvc_frame_t *frame, const bool is_raw_images,
+                     cv::Mat *images);
+
+  uvc_error_t initAndOpenUvc();
+  int setParam(const std::string &name, float val);
+  void sendCameraParam(const int camera_number,
+                       const uvc_ros_driver::DistortionModelTypes dtype,
+                       const double fx, const double fy,
+                       const Eigen::Vector2d &p0, const float k1,
+                       const float k2, const float r1, const float r2,
+                       const Eigen::Matrix3d &H);
+  void setCalibration(CameraParameters camParams);
+
+  void dynamicReconfigureCallback(uvc_ros_driver::UvcDriverConfig &config,
+                                  uint32_t level);
+
+  inline void selectCameraInfo(int camera, sensor_msgs::CameraInfo **ci);
+
+  static void fillDisparityFromSide(const cv::Mat &input_disparity,
+                                    const cv::Mat &valid, const bool &from_left,
+                                    cv::Mat *filled_disparity);
+
+  static void bulidFilledDisparityImage(const cv::Mat &input_disparity,
+                                        cv::Mat *disparity_filled,
+                                        cv::Mat *input_valid);
+
+  void whiteBalance(const cv::Mat &color_image, cv::Mat *white_balanced,
+                    double measure_point = 0.20);
+
+  void calcPointCloud(
+      const cv::Mat &input_disparity, const cv::Mat &left_image,
+      const size_t cam_num, pcl::PointCloud<pcl::PointXYZRGB> *pointcloud,
+      pcl::PointCloud<pcl::PointXYZRGB> *freespace_pointcloud) const;
+
+  void watchdogCallback(const ros::TimerEvent &);
+
+ public:
+  uvcROSDriver(ros::NodeHandle nh) : nh_(nh), it_(nh_){};
+  ~uvcROSDriver();
+  void uvc_cb(uvc_frame_t *frame);
+  /**
+   * initialize device, set up topic publishers and compute homography for
+   * the
+   * cameras
+   */
+  void initDevice();
+  /**
+   * setup uvc stream
+   */
+  void startDevice();
+  // getter and setter for different internal variables
+  bool getPrimaryCamMode() { return primary_camera_mode_; }
+  void setPrimaryCamMode(bool primary_camera_mode) {
+    primary_camera_mode_ = primary_camera_mode;
+  };
+  bool getRawEnabledMode() { return raw_enabled_; }
+  void setRawEnabledMode(bool raw_enabled) { raw_enabled_ = raw_enabled; }
+  bool getRectEnabledMode() { return rect_enabled_; }
+  void setRectEnabledMode(bool rect_enabled) { rect_enabled_ = rect_enabled; }
+  bool getUseOfDepthMap() { return depth_map_; }
+  void setUseOfDepthMap(bool depth_map) { depth_map_ = depth_map; }
+  bool getCalibrationParam() { return set_calibration_; }
+  void setCalibrationParam(bool calibration) {
+    set_calibration_ = calibration;
+  };
+  int getNumberOfCameras() { return n_cameras_; }
+  void setNumberOfCameras(int n_cameras) { n_cameras_ = n_cameras; }
+  int buildCameraConfig() {
+    int camera_config;
+    switch (n_cameras_) {
+      case 10:
+        camera_config = 0x3FF;
+        break;
+      case 8:
+        camera_config = 0x1EF;
+        break;
+      case 6:
+        camera_config = 0x0E7;
+        break;
+      case 4:
+        camera_config = 0x063;
+        break;
+      case 2:
+      default:
+        camera_config = 0x021;
+        break;
+    }
+
+    if (!raw_enabled_) {
+      camera_config = camera_config & 0xFE1;
+    }
+    if (!rect_enabled_) {
+      camera_config = camera_config & 0x01F;
+    }
+
+    return camera_config;
+  }
+
+  CameraParameters getCameraParams() { return camera_params_; };
+  void setCameraParams(const CameraParameters &camera_params) {
+    camera_params_ = camera_params;
+  };
+  void getHomographyMapping(
+      std::vector<std::pair<int, int>> &homography_mapping) {
+    homography_mapping = homography_mapping_;
+  };
+  void setHomographyMapping(
+      const std::vector<std::pair<int, int>> &homography_mapping) {
+    homography_mapping_ = homography_mapping;
+  };
+  int getCalibrationMode() { return calibration_mode_; };
+  void setCalibrationMode(int calibration_mode) {
+    calibration_mode_ = calibration_mode;
+
+    // update modulo_ variable also
+    if (calibration_mode != 0) {
+      modulo_ = 4;
+    }
+  };
+};
+
+}  // namespace uvc
 
 #endif /* end of include guard: __UVC_ROS_DRIVER_H__ */

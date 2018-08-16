@@ -15,7 +15,7 @@ public:
 
 	//Computes homography for stereo rectification
 	void getHomography(Eigen::Matrix3d &H0, Eigen::Matrix3d &H1, double &f_new, Eigen::Vector2d &p0_new,
-			   Eigen::Vector2d &p1_new);
+			   Eigen::Vector2d &p1_new, double zoom);
 
 private:
 	double r0_[9];
