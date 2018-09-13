@@ -83,15 +83,14 @@ int main(int argc, char **argv)
 	uvc::uvcROSDriver uvc_ros_driver(nh);
 
 	// get params from launch file
-	bool set_calibration, depth_map, calibration_mode, primary_camera_mode;
+	bool calibration_mode, primary_camera_mode, camera_tile;
 	int number_of_cameras;
 	std::string calibration_file_path;
 	// TODO: check if parameter exist
 	nh.getParam("numberOfCameras", number_of_cameras);
-	nh.getParam("setCalibration", set_calibration);
-	nh.getParam("depthMap", depth_map);
 	nh.getParam("cameraConfigFile", calibration_file_path);
 	nh.getParam("calibrationMode", calibration_mode);
+	nh.getParam("cameraTile", camera_tile);
 	nh.getParam("primaryCamMode", primary_camera_mode);
 
 	//force cam number to be even
@@ -102,6 +101,7 @@ int main(int argc, char **argv)
 	// set parameters
 	uvc_ros_driver.setNumberOfCameras(number_of_cameras);
 	uvc_ros_driver.setPrimaryCamMode(primary_camera_mode);
+	uvc_ros_driver.setCameraTile(camera_tile);
 
 	// initialize device
 	uvc_ros_driver.initDevice();
@@ -121,15 +121,6 @@ int main(int argc, char **argv)
 	}
 
 
-	// set calibration parameters
-	if (camParams.isValid) {
-		uvc_ros_driver.setCalibrationParam(set_calibration);
-		uvc_ros_driver.setUseOfDepthMap(depth_map);
-
-	} else {
-		uvc_ros_driver.setCalibrationParam(0);
-		uvc_ros_driver.setUseOfDepthMap(0);
-	}
 
 	uvc_ros_driver.setCalibrationMode(calibration_mode);
 	uvc_ros_driver.setCameraParams(camParams);

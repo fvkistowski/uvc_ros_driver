@@ -97,10 +97,9 @@ class uvcROSDriver {
 
   bool device_initialized_ = false;
   bool primary_camera_mode_ = false;
+  bool camera_tile_ = false;
   bool raw_enabled_ = true;
   bool rect_enabled_ = false;
-  bool depth_map_ = false;
-  bool set_calibration_ = false;
   bool uvc_cb_flag_ = false;
   bool first_imu_received_flag_ = false;
   bool serial_port_open_ = false;
@@ -246,11 +245,10 @@ class uvcROSDriver {
   void setRawEnabledMode(bool raw_enabled) { raw_enabled_ = raw_enabled; }
   bool getRectEnabledMode() { return rect_enabled_; }
   void setRectEnabledMode(bool rect_enabled) { rect_enabled_ = rect_enabled; }
-  bool getUseOfDepthMap() { return depth_map_; }
-  void setUseOfDepthMap(bool depth_map) { depth_map_ = depth_map; }
   bool getCalibrationParam() { return set_calibration_; }
-  void setCalibrationParam(bool calibration) {
-    set_calibration_ = calibration;
+  bool getCameraTile() { return camera_tile_; }
+  void setCameraTile(bool camera_tile) {
+    camera_tile_ = camera_tile;
   };
   int getNumberOfCameras() { return n_cameras_; }
   void setNumberOfCameras(int n_cameras) { n_cameras_ = n_cameras; }
