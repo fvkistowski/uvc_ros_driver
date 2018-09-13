@@ -14,10 +14,12 @@ public:
 			 const uvc_ros_driver::FPGACalibration &calib_cam1);
 
 	//Computes homography for stereo rectification
-	void getHomography(Eigen::Matrix3d &H0, Eigen::Matrix3d &H1, double &f_new, Eigen::Vector2d &p0_new,
-			   Eigen::Vector2d &p1_new, double zoom);
+	void getHomography(Eigen::Matrix3d &H0, Eigen::Matrix3d &H1, Eigen::Matrix3d &R0, Eigen::Matrix3d &R1,
+				double &f_new, Eigen::Vector2d &p0_new, Eigen::Vector2d &p1_new, double zoom);
 
 private:
+	bool equi_model0_;
+	bool equi_model1_;
 	double r0_[9];
 	double t0_[3];
 	double f0_[2];

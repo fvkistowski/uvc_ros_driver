@@ -294,12 +294,12 @@ int uvcROSDriver::setParam(const std::string &name, float val) {
 ////////////////////////////////////////////////////////////////////////////////
 
 void uvcROSDriver::sendCameraParam(
-    const int camera_number, const uvc_ros_driver::DistortionModelTypes dtype,
+    const int camera_number, const uvc_ros_driver::DistortionModelTypes dmt,
     const double fx, const double fy, const Eigen::Vector2d &p0, const float k1,
     const float k2, const float r1, const float r2, const Eigen::Matrix3d &H) {
   std::string camera_name = "CAM" + std::to_string(camera_number);
 
-  setParam("PARAM_DM_" + camera_name, static_cast<float>(dtype));
+  setParam("PARAM_DM_" + camera_name, static_cast<float>(dmt));
   setParam("PARAM_CCX_" + camera_name, p0[0]);
   setParam("PARAM_CCY_" + camera_name, p0[1]);
   setParam("PARAM_FCX_" + camera_name, fx);
@@ -397,6 +397,7 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
     f_.resize(n_cameras_);
     p_.resize(n_cameras_);
     H_.resize(n_cameras_);
+    R_.resize(n_cameras_);
     // pointer at camera info
     sensor_msgs::CameraInfo *ci;
     size_t homography_size;
@@ -413,6 +414,8 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
       // temp structures
       Eigen::Matrix3d H0;
       Eigen::Matrix3d H1;
+      Eigen::Matrix3d R0;
+      Eigen::Matrix3d R1;
       double f_new;
       Eigen::Vector2d p0_new, p1_new;
 
@@ -422,7 +425,7 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
       double zoom = -100;
 
       StereoHomography h(cams[indx.first], cams[indx.second]);
-      h.getHomography(H0, H1, f_new, p0_new, p1_new, zoom);
+      h.getHomography(H0, H1, R0, R1, f_new, p0_new, p1_new, zoom);
 
       f_[indx.first] = f_new;
       f_[indx.second] = f_new;
@@ -431,6 +434,8 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
       // TODO check if matrix is copied or only pointer!!
       H_[indx.first] = H0;
       H_[indx.second] = H1;
+      R_[indx.first] = R0;
+      R_[indx.second] = R1;
     }
 
     // Set all parameters here
@@ -440,11 +445,18 @@ void uvcROSDriver::setCalibration(CameraParameters camParams) {
                       cams[i].projection_model_.k2_,
                       cams[i].projection_model_.r1_,
                       cams[i].projection_model_.r2_, H_[i]);
-      setCameraInfoIntrinsics(info_cams_[i], f_[i], f_[i], p_[i](0),
-                              p_[i](1));
+      setCameraInfoIntrinsics(info_cams_[i],  
+				cams[i].projection_model_.focal_length_u_, 
+				cams[i].projection_model_.focal_length_v_, 
+				cams[i].projection_model_.principal_point_u_, 
+				cams[i].projection_model_.principal_point_v_);
+      setCameraInfoRotation(info_cams_[i], R_[i]);
+      setCameraInfoProjection(info_cams_[i], f_[i], f_[i], p_[i](0), p_[i](1), 
+				(-f_[i]*cams[i].projection_model_.t_[0]),0.0);
       setCameraInfoDistortionMdl(
-          info_cams_[i], uvc_ros_driver::ProjectionModelTypes::PINHOLE);
-      setCameraInfoDistortionParams(info_cams_[i], 0, 0, 0, 0, 0);
+          info_cams_[i], cams[i].projection_model_.distortion_type_);
+      setCameraInfoDistortionParams(info_cams_[i], cams[i].projection_model_.k1_, cams[i].projection_model_.k2_, 
+					cams[i].projection_model_.r1_, cams[i].projection_model_.r2_, 0);
       }
   }
   setParam("RESETMT9V034", 1.0f);
@@ -455,11 +467,11 @@ void uvcROSDriver::dynamicReconfigureCallback(
     uvc_ros_driver::UvcDriverConfig &config, uint32_t level) {
   if (!shutdown_) {
     setParam("CAMERA_AUTOEXP", static_cast<float>(config.CAMERA_AUTOEXP));
-    setParam("CAMERA_EXP", static_cast<float>(config.CAMERA_EXP));
+
     setParam("CAMERA_MIN_E", static_cast<float>(config.CAMERA_MIN_E));
     setParam("CAMERA_MAX_E", static_cast<float>(config.CAMERA_MAX_E));
     setParam("CAMERA_AUTOG", static_cast<float>(config.CAMERA_AUTOG));
-    setParam("CAMERA_GAIN", static_cast<float>(config.CAMERA_GAIN));
+
     setParam("STEREO_BAYER_D", static_cast<float>(config.STEREO_BAYER_D));
 
     primary_camera_mode_ = config.PRIMARY_CAM_MODE;
@@ -495,6 +507,29 @@ void uvcROSDriver::dynamicReconfigureCallback(
     setParam("IM_V_FLIP_CAM8", static_cast<float>(config.CAMERA_8_VFLIP));
     setParam("IM_H_FLIP_CAM9", static_cast<float>(config.CAMERA_9_HFLIP));
     setParam("IM_V_FLIP_CAM9", static_cast<float>(config.CAMERA_9_VFLIP));
+
+    setParam("CAMERA_EXP_CAM0", static_cast<float>(config.CAMERA_EXP_CAM0));
+    setParam("CAMERA_EXP_CAM1", static_cast<float>(config.CAMERA_EXP_CAM1));
+    setParam("CAMERA_EXP_CAM2", static_cast<float>(config.CAMERA_EXP_CAM2));
+    setParam("CAMERA_EXP_CAM3", static_cast<float>(config.CAMERA_EXP_CAM3));
+    setParam("CAMERA_EXP_CAM4", static_cast<float>(config.CAMERA_EXP_CAM4));
+    setParam("CAMERA_EXP_CAM5", static_cast<float>(config.CAMERA_EXP_CAM5));
+    setParam("CAMERA_EXP_CAM6", static_cast<float>(config.CAMERA_EXP_CAM6));
+    setParam("CAMERA_EXP_CAM7", static_cast<float>(config.CAMERA_EXP_CAM7));
+    setParam("CAMERA_EXP_CAM8", static_cast<float>(config.CAMERA_EXP_CAM8));
+    setParam("CAMERA_EXP_CAM9", static_cast<float>(config.CAMERA_EXP_CAM9));
+
+    setParam("CAMERA_G_CAM0", static_cast<float>(config.CAMERA_G_CAM0));
+    setParam("CAMERA_G_CAM1", static_cast<float>(config.CAMERA_G_CAM1));
+    setParam("CAMERA_G_CAM2", static_cast<float>(config.CAMERA_G_CAM2));
+    setParam("CAMERA_G_CAM3", static_cast<float>(config.CAMERA_G_CAM3));
+    setParam("CAMERA_G_CAM4", static_cast<float>(config.CAMERA_G_CAM4));
+    setParam("CAMERA_G_CAM5", static_cast<float>(config.CAMERA_G_CAM5));
+    setParam("CAMERA_G_CAM6", static_cast<float>(config.CAMERA_G_CAM6));
+    setParam("CAMERA_G_CAM7", static_cast<float>(config.CAMERA_G_CAM7));
+    setParam("CAMERA_G_CAM8", static_cast<float>(config.CAMERA_G_CAM8));
+    setParam("CAMERA_G_CAM9", static_cast<float>(config.CAMERA_G_CAM9));
+
 
     // update camera parameters in FPGA
     setParam("UPDATEMT9V034", 1.0f);

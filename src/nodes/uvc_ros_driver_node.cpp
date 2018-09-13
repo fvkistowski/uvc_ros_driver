@@ -83,15 +83,13 @@ int main(int argc, char **argv)
 	uvc::uvcROSDriver uvc_ros_driver(nh);
 
 	// get params from launch file
-	bool calibration_mode, primary_camera_mode, camera_tile;
+	bool calibration_mode;
 	int number_of_cameras;
 	std::string calibration_file_path;
 	// TODO: check if parameter exist
 	nh.getParam("numberOfCameras", number_of_cameras);
 	nh.getParam("cameraConfigFile", calibration_file_path);
 	nh.getParam("calibrationMode", calibration_mode);
-	nh.getParam("cameraTile", camera_tile);
-	nh.getParam("primaryCamMode", primary_camera_mode);
 
 	//force cam number to be even
 	if (number_of_cameras % 2 != 0){
@@ -100,9 +98,6 @@ int main(int argc, char **argv)
 
 	// set parameters
 	uvc_ros_driver.setNumberOfCameras(number_of_cameras);
-	uvc_ros_driver.setPrimaryCamMode(primary_camera_mode);
-	uvc_ros_driver.setCameraTile(camera_tile);
-
 	// initialize device
 	uvc_ros_driver.initDevice();
 

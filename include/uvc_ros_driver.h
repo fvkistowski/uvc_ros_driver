@@ -96,8 +96,6 @@ class uvcROSDriver {
   static constexpr double kWatchdogRestartTime = 1.0;
 
   bool device_initialized_ = false;
-  bool primary_camera_mode_ = false;
-  bool camera_tile_ = false;
   bool raw_enabled_ = true;
   bool rect_enabled_ = false;
   bool uvc_cb_flag_ = false;
@@ -124,6 +122,7 @@ class uvcROSDriver {
   std::vector<double> f_;
   std::vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d>> p_;
   std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> H_;
+  std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Vector3d>> R_;
 
   // Dynamic reconfigure.
   dynamic_reconfigure::Server<uvc_ros_driver::UvcDriverConfig>
@@ -237,19 +236,11 @@ class uvcROSDriver {
    */
   void startDevice();
   // getter and setter for different internal variables
-  bool getPrimaryCamMode() { return primary_camera_mode_; }
-  void setPrimaryCamMode(bool primary_camera_mode) {
-    primary_camera_mode_ = primary_camera_mode;
-  };
   bool getRawEnabledMode() { return raw_enabled_; }
   void setRawEnabledMode(bool raw_enabled) { raw_enabled_ = raw_enabled; }
   bool getRectEnabledMode() { return rect_enabled_; }
   void setRectEnabledMode(bool rect_enabled) { rect_enabled_ = rect_enabled; }
   bool getCalibrationParam() { return set_calibration_; }
-  bool getCameraTile() { return camera_tile_; }
-  void setCameraTile(bool camera_tile) {
-    camera_tile_ = camera_tile;
-  };
   int getNumberOfCameras() { return n_cameras_; }
   void setNumberOfCameras(int n_cameras) { n_cameras_ = n_cameras; }
   int buildCameraConfig() {
